@@ -13,27 +13,13 @@ export enum WineStatus {
   DRUNK = 'Drunk'
 }
 
-// AI Enrichment interface
-export interface AiEnrichment {
-  tasting_notes?: string;
-  drink_window?: {
-    from_year: number;
-    to_year: number;
-    drink_now: boolean;
-  };
-  possible_scores?: {
-    wine_spectator?: {
-      score: number;
-      source_url?: string;
-    };
-    james_suckling?: {
-      score: number;
-      source_url?: string;
-    };
-  };
-  sources?: string[];
-  confidence: number;
-}
+// AI Enrichment interface - field-by-field structure
+export type AIEnrichment = {
+  drink_window?: { from?: number; to?: number; source?: string[] };
+  tasting_notes?: { text: string; source?: string[] };
+  critic_scores?: { wine_spectator?: number; james_suckling?: number; source?: string[] };
+  food_pairings?: { items: string[]; source?: string[] };
+};
 
 // Main Wine interface mirroring the database schema
 export interface Wine {
@@ -66,7 +52,7 @@ export interface Wine {
   drink_window_from?: number;
   drink_window_to?: number;
   drink_now?: boolean;
-  ai_enrichment: AiEnrichment | null;
+  ai_enrichment?: AIEnrichment | null;
   ai_confidence?: number | null;
   ai_last_error?: string | null;
   ai_refreshed_at?: string | null;

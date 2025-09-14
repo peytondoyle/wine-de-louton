@@ -2,7 +2,7 @@ import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { menuContainer, menuViewport, menuItemBase, menuItemState, menuItemIcon, menuSeparator } from "./tokens"
+import { menuContainer, menuViewport, menuItemBase, menuItemState, menuItemIcon, menuSeparator, menuLabel } from "./tokens"
 
 const Select = SelectPrimitive.Root
 
@@ -17,7 +17,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-[14px] text-neutral-900",
+      "h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-base text-neutral-900",
       "placeholder:text-neutral-400",
       "focus:outline-none focus:ring-2 focus:ring-blue-500/40",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40",
@@ -77,14 +77,14 @@ const SelectContent = React.forwardRef<
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
-      className={menuContainer(
-        cn(
-          "w-[var(--radix-select-trigger-width)]",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-          position === "popper" &&
-            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-          className
-        )
+      className={cn(
+        "z-[60] min-w-[12rem] w-[var(--radix-select-trigger-width)]",
+        "rounded-xl border border-neutral-200 bg-white shadow-md",
+        "text-neutral-900",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        position === "popper" &&
+          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+        className
       )}
       position={position}
       sideOffset={8}
@@ -93,7 +93,7 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          menuViewport,
+          "max-h-[60vh] overflow-y-auto overscroll-contain p-1",
           position === "popper" &&
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
         )}
@@ -112,7 +112,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn("py-1.5 pl-8 pr-2 text-sm font-semibold", className)}
+    className={cn(menuLabel, className)}
     {...props}
   />
 ))
@@ -124,12 +124,19 @@ const SelectItem = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
-    className={cn(menuItemBase, menuItemState, className)}
+    className={cn(
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-3.5 min-h-10 text-[15px] leading-5 outline-none",
+      "text-neutral-900 hover:bg-neutral-100 data-[highlighted]:bg-neutral-100",
+      "data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-700 data-[state=checked]:font-medium",
+      "data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+      className
+    )}
     {...props}
   >
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator>
-      <Check className={menuItemIcon} aria-hidden="true" />
+      <Check className="ml-auto size-4 shrink-0 text-blue-600" aria-hidden="true" />
     </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 ))

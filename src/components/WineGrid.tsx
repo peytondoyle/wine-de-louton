@@ -8,14 +8,18 @@ interface WineGridProps {
   loading?: boolean
   onWineClick: (wine: Wine) => void
   onMarkDrunk: (id: string) => void
+  onUndo: (id: string) => void
   onAddWine: () => void
+  onWineUpdated?: (wine: Wine) => void
   density?: 'compact' | 'comfortable'
+  winesWithUndo?: Set<string>
+  gridViewMode?: boolean
 }
 
-export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onAddWine, density = 'comfortable' }: WineGridProps) {
+export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onAddWine, onWineUpdated, density = 'comfortable', winesWithUndo = new Set(), gridViewMode = false }: WineGridProps) {
   const gridClasses = density === 'compact' 
-    ? "mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
-    : "mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+    ? "mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3"
+    : "mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6"
 
   if (loading) {
     return (
@@ -47,13 +51,18 @@ export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onAddWine, 
 
   return (
     <div className={gridClasses}>
-      {wines.map((wine) => (
+      {wines.map((wine, index) => (
         <WineCard
           key={wine.id}
           wine={wine}
           onMarkDrunk={onMarkDrunk}
+          onUndo={onUndo}
           onClick={onWineClick}
+          onWineUpdated={onWineUpdated}
           density={density}
+          showUndo={winesWithUndo.has(wine.id)}
+          gridViewMode={gridViewMode}
+          gridIndex={index}
         />
       ))}
     </div>

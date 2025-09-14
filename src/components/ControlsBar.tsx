@@ -5,6 +5,7 @@ import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select'
 import { Label } from './ui/Label'
+import { Section, SectionDivider } from './ui/Section'
 import type { ControlsState, WineSortField, WineSortDirection } from '../types'
 import { WineStatus, BottleSize } from '../types'
 

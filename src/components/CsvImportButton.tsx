@@ -1,11 +1,14 @@
 import React, { useState } from 'react'
-import { Upload, Download, AlertCircle, CheckCircle } from 'lucide-react'
+import { Upload, Download, AlertCircle, CheckCircle, X } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/Dialog'
 import { TextArea } from './ui/TextArea'
 import { Label } from './ui/Label'
+import { useScrollLock } from '../hooks/useScrollLock'
 import { importWinesFromCsv, generateSampleCsv } from '../data/csv-import'
-import { toast } from 'react-hot-toast'
+import { toast } from '../lib/toast'
+import { toastError } from '../utils/toastMessages'
+import DrawerFooterActions from './DrawerFooterActions'
 
 interface CsvImportButtonProps {
   onImportComplete: () => void
@@ -17,9 +20,12 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ success: number; errors: string[] } | null>(null)
 
+  // Lock scroll when dialog is open
+  useScrollLock(isOpen)
+
   const handleImport = async () => {
     if (!csvContent.trim()) {
-      toast.error('Please paste CSV content')
+      toast.error('Paste CSV content')
       return
     }
 
@@ -31,12 +37,12 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
       setImportResult(result)
       
       if (result.success > 0) {
-        toast.success(`Imported ${result.success} wines successfully`)
+        toast.success(`${result.success} wines imported.`)
         onImportComplete()
       }
       
       if (result.errors.length > 0) {
-        toast.error(`${result.errors.length} wines failed to import`)
+        toast.error(`${result.errors.length} imports failed`)
       }
     } catch (error) {
       console.error('CSV import error:', error)
@@ -76,7 +82,7 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
             fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
             rounded-2xl border border-neutral-200/70
             bg-white supports-[backdrop-filter]:bg-white/95
-            shadow-xl outline-none max-h-[90vh] overflow-y-auto
+            shadow-xl outline-none max-h-[90vh] overflow-y-auto overscroll-none
             data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95
             data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95
           "
@@ -141,17 +147,22 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
               </div>
             )}
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={handleClose}>
-                Close
-              </Button>
-              <Button
-                onClick={handleImport}
-                disabled={isImporting || !csvContent.trim()}
-              >
-                {isImporting ? 'Importing...' : 'Import Wines'}
-              </Button>
-            </div>
+            <DrawerFooterActions
+              primary={{
+                label: isImporting ? 'Importing...' : 'Import Wines',
+                onClick: handleImport,
+                icon: <Upload className="h-4 w-4" />,
+                loading: isImporting,
+                disabled: !csvContent.trim(),
+                testId: 'import-wines-button'
+              }}
+              secondary={{
+                label: 'Close',
+                onClick: handleClose,
+                icon: <X className="h-4 w-4" />,
+                testId: 'close-import-button'
+              }}
+            />
           </div>
         </DialogContent>
       </Dialog>

@@ -80,7 +80,7 @@ const PillInput = React.forwardRef<HTMLDivElement, PillInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           placeholder={value.length === 0 ? placeholder : ""}
-          className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+          className="flex-1 bg-transparent outline-none placeholder:text-muted-foreground text-base"
         />
       </div>
     )

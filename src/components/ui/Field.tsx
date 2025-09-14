@@ -13,7 +13,7 @@ interface FieldProps {
 export function Field({ label, helperText, error, required, children, className }: FieldProps) {
   return (
     <label className={cn("block", className)}>
-      <span className="block text-[13px] font-medium">
+      <span className="block text-[13px] font-medium text-neutral-700">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </span>

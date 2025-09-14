@@ -1,0 +1,444 @@
+import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
+import { Wine, AIEnrichment } from '../types'
+import { applyDrinkWindow, applyTastingNotes, applyCriticScores, dismissAIField, dismissAllAI } from '../data/wines'
+import { Button } from './ui/Button'
+import { Card } from './ui/Card'
+import { Label } from './ui/Label'
+import { Check, Loader2, X, Info } from 'lucide-react'
+import { ConfidenceBadge } from './ConfidenceBadge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/Tooltip'
+import { generateDiff } from '../lib/diff'
+import { track } from '../lib/analytics'
+
+interface EnrichmentReviewPanelProps {
+  wine: Wine
+  onApplied?: () => void
+  onDismissed?: () => void
+}
+
+type LoadingState = {
+  field: keyof AIEnrichment | 'all' | null
+  action: 'apply' | 'dismiss' | null
+}
+
+type SuccessState = {
+  field: keyof AIEnrichment | 'all' | null
+  action: 'apply' | 'dismiss' | null
+}
+
+type ErrorState = {
+  field: keyof AIEnrichment | 'all' | null
+  action: 'apply' | 'dismiss' | null
+  message: string
+}
+
+function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentReviewPanelProps) {
+  const [loading, setLoading] = useState<LoadingState>({ field: null, action: null })
+  const [success, setSuccess] = useState<SuccessState>({ field: null, action: null })
+  const [error, setError] = useState<ErrorState>({ field: null, action: null, message: '' })
+  const [ariaLiveMessage, setAriaLiveMessage] = useState('')
+  const fieldRefs = useRef<{ [key in keyof AIEnrichment]?: HTMLDivElement | null }>({})
+
+  if (!wine.ai_enrichment) {
+    return null
+  }
+
+  const enrichment = wine.ai_enrichment
+
+  // Keyboard event handler for Enter/Esc shortcuts
+  const handleKeyDown = useCallback((event: React.KeyboardEvent, field: keyof AIEnrichment, action: 'apply' | 'dismiss') => {
+    if (event.key === 'Enter' && action === 'apply') {
+      event.preventDefault()
+      handleApply(field, enrichment[field])
+    } else if (event.key === 'Escape' && action === 'dismiss') {
+      event.preventDefault()
+      handleDismiss(field)
+    }
+  }, [enrichment])
+
+  const handleApply = useCallback(async (field: keyof AIEnrichment, data: any) => {
+    setLoading({ field, action: 'apply' })
+    setError({ field: null, action: null, message: '' })
+    try {
+      switch (field) {
+        case 'drink_window':
+          await applyDrinkWindow(wine.id, data)
+          break
+        case 'tasting_notes':
+          await applyTastingNotes(wine.id, data.text)
+          break
+        case 'critic_scores':
+          await applyCriticScores(wine.id, data)
+          break
+        case 'food_pairings':
+          // Food pairings don't have a direct field to apply to, so we'll just dismiss
+          await dismissAIField(wine.id, field)
+          break
+      }
+      
+      // Track successful apply action
+      track('enrichment_apply', {
+        wine_id: wine.id,
+        field,
+        confidence: wine.ai_confidence
+      })
+      
+      setSuccess({ field, action: 'apply' })
+      setAriaLiveMessage(`${field.replace('_', ' ')} applied`)
+      setTimeout(() => {
+        setSuccess({ field: null, action: null })
+        setAriaLiveMessage('')
+      }, 2000)
+      onApplied?.()
+    } catch (error) {
+      console.error(`Error applying ${field}:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Apply failed'
+      setError({ field, action: 'apply', message: errorMessage })
+      setAriaLiveMessage(`Apply failed: ${errorMessage}`)
+      setTimeout(() => {
+        setError({ field: null, action: null, message: '' })
+        setAriaLiveMessage('')
+      }, 5000)
+    } finally {
+      setLoading({ field: null, action: null })
+    }
+  }, [wine.id, wine.ai_confidence, onApplied])
+
+  const handleDismiss = useCallback(async (field: keyof AIEnrichment) => {
+    setLoading({ field, action: 'dismiss' })
+    setError({ field: null, action: null, message: '' })
+    try {
+      await dismissAIField(wine.id, field)
+      
+      // Track successful dismiss action
+      track('enrichment_dismiss', {
+        wine_id: wine.id,
+        field,
+        confidence: wine.ai_confidence
+      })
+      
+      setSuccess({ field, action: 'dismiss' })
+      setAriaLiveMessage(`${field.replace('_', ' ')} dismissed`)
+      setTimeout(() => {
+        setSuccess({ field: null, action: null })
+        setAriaLiveMessage('')
+      }, 2000)
+      onDismissed?.()
+    } catch (error) {
+      console.error(`Error dismissing ${field}:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Dismiss failed'
+      setError({ field, action: 'dismiss', message: errorMessage })
+      setAriaLiveMessage(`Dismiss failed: ${errorMessage}`)
+      setTimeout(() => {
+        setError({ field: null, action: null, message: '' })
+        setAriaLiveMessage('')
+      }, 5000)
+    } finally {
+      setLoading({ field: null, action: null })
+    }
+  }, [wine.id, wine.ai_confidence, onDismissed])
+
+  const handleDismissAll = useCallback(async () => {
+    setLoading({ field: 'all', action: 'dismiss' })
+    setError({ field: null, action: null, message: '' })
+    try {
+      await dismissAllAI(wine.id)
+      
+      // Track successful dismiss all action
+      track('enrichment_dismiss_all', {
+        wine_id: wine.id,
+        confidence: wine.ai_confidence
+      })
+      
+      setSuccess({ field: 'all', action: 'dismiss' })
+      setAriaLiveMessage('All suggestions dismissed')
+      setTimeout(() => {
+        setSuccess({ field: null, action: null })
+        setAriaLiveMessage('')
+      }, 2000)
+      onDismissed?.()
+    } catch (error) {
+      console.error('Error dismissing all AI:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Dismiss all failed'
+      setError({ field: 'all', action: 'dismiss', message: errorMessage })
+      setAriaLiveMessage(`Dismiss all failed: ${errorMessage}`)
+      setTimeout(() => {
+        setError({ field: null, action: null, message: '' })
+        setAriaLiveMessage('')
+      }, 5000)
+    } finally {
+      setLoading({ field: null, action: null })
+    }
+  }, [wine.id, wine.ai_confidence, onDismissed])
+
+  const getCurrentValue = useCallback((field: keyof AIEnrichment) => {
+    switch (field) {
+      case 'drink_window':
+        return wine.drink_window_from && wine.drink_window_to 
+          ? `${wine.drink_window_from}–${wine.drink_window_to}`
+          : 'Not set'
+      case 'tasting_notes':
+        return wine.peyton_notes || 'Not set'
+      case 'critic_scores':
+        const scores = []
+        if (wine.score_wine_spectator) scores.push(`WS: ${wine.score_wine_spectator}`)
+        if (wine.score_james_suckling) scores.push(`JS: ${wine.score_james_suckling}`)
+        return scores.length > 0 ? scores.join(', ') : 'Not set'
+      case 'food_pairings':
+        return 'No direct field' // Food pairings don't map to a specific field
+      default:
+        return 'Not set'
+    }
+  }, [wine.drink_window_from, wine.drink_window_to, wine.peyton_notes, wine.score_wine_spectator, wine.score_james_suckling])
+
+  const getSuggestedValue = useCallback((field: keyof AIEnrichment) => {
+    const data = enrichment[field]
+    if (!data) return null
+
+    switch (field) {
+      case 'drink_window':
+        return `${(data as any).from}–${(data as any).to}`
+      case 'tasting_notes':
+        return (data as any).text
+      case 'critic_scores':
+        const scores = []
+        if ((data as any).wine_spectator) scores.push(`WS: ${(data as any).wine_spectator}`)
+        if ((data as any).james_suckling) scores.push(`JS: ${(data as any).james_suckling}`)
+        return scores.length > 0 ? scores.join(', ') : null
+      case 'food_pairings':
+        return (data as any).items.join(', ')
+      default:
+        return null
+    }
+  }, [enrichment])
+
+  const getSources = (field: keyof AIEnrichment) => {
+    const data = enrichment[field]
+    if (!data || !(data as any).source) return []
+    return (data as any).source
+  }
+
+  const formatSources = (sources: string[]) => {
+    if (sources.length === 0) return 'No sources available'
+    if (sources.length === 1) return `Source: ${sources[0]}`
+    return `Sources: ${sources.join(', ')}`
+  }
+
+  const getDiff = useCallback((field: keyof AIEnrichment) => {
+    const currentValue = getCurrentValue(field)
+    const suggestedValue = getSuggestedValue(field)
+    
+    if (!suggestedValue) return null
+    
+    return generateDiff(field, currentValue, suggestedValue)
+  }, [getCurrentValue, getSuggestedValue])
+
+  const isFieldLoading = (field: keyof AIEnrichment) => 
+    loading.field === field && loading.action !== null
+
+  const isFieldSuccess = (field: keyof AIEnrichment | 'all') => 
+    success.field === field && success.action !== null
+
+  const isFieldError = (field: keyof AIEnrichment | 'all') => 
+    error.field === field && error.action !== null
+
+  // Memoize field values to avoid recomputing on every render
+  const fieldValues = useMemo(() => ({
+    drink_window: {
+      current: getCurrentValue('drink_window'),
+      suggested: getSuggestedValue('drink_window')
+    },
+    tasting_notes: {
+      current: getCurrentValue('tasting_notes'),
+      suggested: getSuggestedValue('tasting_notes')
+    },
+    critic_scores: {
+      current: getCurrentValue('critic_scores'),
+      suggested: getSuggestedValue('critic_scores')
+    },
+    food_pairings: {
+      current: getCurrentValue('food_pairings'),
+      suggested: getSuggestedValue('food_pairings')
+    }
+  }), [getCurrentValue, getSuggestedValue])
+
+  const SourceTooltip = ({ field }: { field: keyof AIEnrichment }) => {
+    const sources = getSources(field)
+    if (sources.length === 0) return null
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className="inline-flex items-center justify-center w-4 h-4 text-neutral-400 hover:text-neutral-600 transition-colors"
+            aria-label={`View sources for ${field}: ${formatSources(sources)}`}
+          >
+            <Info className="w-3 h-3" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <p className="text-xs">{formatSources(sources)}</p>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const FieldCard = ({ field, title, currentValue, suggestedValue }: {
+    field: keyof AIEnrichment
+    title: string
+    currentValue: string
+    suggestedValue: string | null
+  }) => {
+    if (!suggestedValue) return null
+
+    return (
+      <div 
+        ref={(el) => { fieldRefs.current[field] = el }}
+        className="border border-neutral-200 rounded-lg p-4 space-y-3 bg-white"
+        role="region"
+        aria-labelledby={`${field}-title`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <Label id={`${field}-title`} className="text-sm font-medium text-neutral-900">{title}</Label>
+              <SourceTooltip field={field} />
+            </div>
+            
+            {/* Current value - only show if different from suggested */}
+            {currentValue !== suggestedValue && currentValue && (
+              <div className="text-sm text-neutral-600 mb-2">
+                <span className="font-medium">Current:</span> {currentValue}
+              </div>
+            )}
+            
+            {/* Suggested value with diff highlighting */}
+            <div className="text-sm text-neutral-900 bg-neutral-50 p-3 rounded border">
+              <span className="font-medium text-neutral-700">Suggested:</span>{' '}
+              <span dangerouslySetInnerHTML={{ __html: getDiff(field)?.html || suggestedValue }} />
+            </div>
+            
+            {isFieldError(field) && (
+              <div className="text-sm text-red-600 bg-red-50 p-2 rounded mt-2">
+                {error.message}
+              </div>
+            )}
+          </div>
+          
+          {/* Action buttons */}
+          <div className="flex flex-col gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => handleApply(field, enrichment[field])}
+              onKeyDown={(e) => handleKeyDown(e, field, 'apply')}
+              disabled={isFieldLoading(field)}
+              className={isFieldError(field) && error.action === 'apply' ? 'border-red-300 text-red-600' : ''}
+              aria-label={`Apply ${title} suggestion`}
+            >
+              {isFieldLoading(field) && loading.action === 'apply' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isFieldSuccess(field) && success.action === 'apply' ? (
+                <Check className="h-3 w-3" />
+              ) : isFieldError(field) && error.action === 'apply' ? (
+                <X className="h-3 w-3" />
+              ) : (
+                'Apply'
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleDismiss(field)}
+              onKeyDown={(e) => handleKeyDown(e, field, 'dismiss')}
+              disabled={isFieldLoading(field)}
+              className={isFieldError(field) && error.action === 'dismiss' ? 'text-red-600' : ''}
+              aria-label={`Dismiss ${title} suggestion`}
+            >
+              {isFieldLoading(field) && loading.action === 'dismiss' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isFieldSuccess(field) && success.action === 'dismiss' ? (
+                <Check className="h-3 w-3" />
+              ) : isFieldError(field) && error.action === 'dismiss' ? (
+                <X className="h-3 w-3" />
+              ) : (
+                'Dismiss'
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-4">
+        {/* Aria-live region for screen reader announcements */}
+        <div 
+          aria-live="polite" 
+          aria-atomic="true" 
+          className="sr-only"
+        >
+          {ariaLiveMessage}
+        </div>
+        <div className="flex items-center justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDismissAll}
+            disabled={loading.field === 'all'}
+            className={isFieldError('all') && error.action === 'dismiss' ? 'border-red-300 text-red-600' : ''}
+          >
+            {loading.field === 'all' && loading.action === 'dismiss' ? (
+              <Loader2 className="h-3 w-3 animate-spin mr-2" />
+            ) : isFieldSuccess('all') && success.action === 'dismiss' ? (
+              <Check className="h-3 w-3 text-green-600 mr-2" />
+            ) : isFieldError('all') && error.action === 'dismiss' ? (
+              <X className="h-3 w-3 text-red-600 mr-2" />
+            ) : null}
+            Dismiss All
+          </Button>
+        </div>
+
+        {isFieldError('all') && (
+          <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+            {error.message}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <FieldCard
+            field="drink_window"
+            title="Drink Window"
+            currentValue={fieldValues.drink_window.current}
+            suggestedValue={fieldValues.drink_window.suggested}
+          />
+
+          <FieldCard
+            field="tasting_notes"
+            title="Tasting Notes"
+            currentValue={fieldValues.tasting_notes.current}
+            suggestedValue={fieldValues.tasting_notes.suggested}
+          />
+
+          <FieldCard
+            field="critic_scores"
+            title="Critic Scores"
+            currentValue={fieldValues.critic_scores.current}
+            suggestedValue={fieldValues.critic_scores.suggested}
+          />
+
+          <FieldCard
+            field="food_pairings"
+            title="Food Pairings"
+            currentValue={fieldValues.food_pairings.current}
+            suggestedValue={fieldValues.food_pairings.suggested}
+          />
+        </div>
+      </div>
+    </TooltipProvider>
+  )
+}
+
+export default memo(EnrichmentReviewPanel)

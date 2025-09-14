@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import type { AiEnrichment } from '../types'
+import type { AIEnrichment } from '../types'
 import { updateWine } from './wines'
 
 interface EnrichmentRequest {
@@ -18,7 +18,7 @@ interface EnrichmentRequest {
 /**
  * Retries AI enrichment for a wine
  */
-export async function retryEnrichment(wineId: string): Promise<AiEnrichment | null> {
+export async function retryEnrichment(wineId: string): Promise<AIEnrichment | null> {
   // First, get the wine data to retry enrichment
   const { data: wine, error } = await supabase
     .from('wines')
@@ -44,7 +44,7 @@ export async function retryEnrichment(wineId: string): Promise<AiEnrichment | nu
   return requestEnrichment(minimal)
 }
 
-export async function requestEnrichment(minimal: EnrichmentRequest): Promise<AiEnrichment | null> {
+export async function requestEnrichment(minimal: EnrichmentRequest): Promise<AIEnrichment | null> {
   try {
     const { data, error } = await supabase.functions.invoke('enrich-wine', {
       body: minimal
@@ -70,7 +70,7 @@ export async function requestEnrichment(minimal: EnrichmentRequest): Promise<AiE
       return null
     }
 
-    if (!data || !data.confidence) {
+    if (!data) {
       console.warn('No enrichment data returned')
       // Store the error in the wine record (if column exists)
       try {
@@ -90,14 +90,18 @@ export async function requestEnrichment(minimal: EnrichmentRequest): Promise<AiE
       return null
     }
 
+    // Extract confidence and enrichment data from response
+    const { confidence, ...enrichmentData } = data
+    const confidenceValue = typeof confidence === 'number' ? confidence : 0.5
+
     // Update the wine with the enrichment data and clear any previous errors
     await updateWine(minimal.id, {
-      ai_enrichment: data,
-      ai_confidence: data.confidence,
+      ai_enrichment: enrichmentData,
+      ai_confidence: confidenceValue,
       ai_last_error: null
     })
 
-    return data
+    return enrichmentData
   } catch (error) {
     console.error('Error requesting enrichment:', error)
     // Store the error in the wine record (if column exists)

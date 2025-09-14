@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Wine as WineIcon, X, Grid3X3, Grid2X2 } from 'lucide-react'
-import type { Wine, ControlsState, WineStatus, BottleSize, WineSortField, WineSortDirection } from './types'
-import { listWines, getWine, markDrunk } from './data/wines'
+import { Plus, Wine as WineIcon, X, Grid3X3, Grid2X2, LayoutGrid } from 'lucide-react'
+import type { Wine, ControlsState, BottleSize, WineSortField, WineSortDirection } from './types'
+import { WineStatus } from './types'
+import { listWines, getWine, markDrunk, updateWine } from './data/wines'
 import { pingWines } from './data/_smoke'
 import { ControlsBar } from './components/ControlsBar'
 import { WineGrid } from './components/WineGrid'
@@ -9,7 +10,10 @@ import { WineSheet } from './components/WineSheet'
 import { WineDetailDrawer } from './components/WineDetailDrawer'
 import { CsvImportButton } from './components/CsvImportButton'
 import { Button } from './components/ui/Button'
-import { toast } from 'react-hot-toast'
+import { ToastHost } from './components/ToastHost'
+import { QAChecklistOverlay } from './components/QAChecklistOverlay'
+import { toast } from './lib/toast'
+import { toastDrunk, toastError } from './utils/toastMessages'
 
 function App() {
   const [wines, setWines] = useState<Wine[]>([])
@@ -19,9 +23,14 @@ function App() {
   const [showEditSheet, setShowEditSheet] = useState(false)
   const [editingWine, setEditingWine] = useState<Wine | null>(null)
   const [showEmptyStateTip, setShowEmptyStateTip] = useState(true)
+  const [winesWithUndo, setWinesWithUndo] = useState<Set<string>>(new Set())
   const [gridDensity, setGridDensity] = useState<'compact' | 'comfortable'>(() => {
     const saved = localStorage.getItem('wine-grid-density')
     return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable'
+  })
+  const [gridViewMode, setGridViewMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('wine-grid-view-mode')
+    return saved === 'true'
   })
 
   // Controls state with URL persistence
@@ -64,6 +73,21 @@ function App() {
     localStorage.setItem('wine-grid-density', gridDensity)
   }, [gridDensity])
 
+  // Save grid view mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('wine-grid-view-mode', gridViewMode.toString())
+  }, [gridViewMode])
+
+  // Auto-remove wines from undo set after 5 seconds
+  useEffect(() => {
+    if (winesWithUndo.size > 0) {
+      const timer = setTimeout(() => {
+        setWinesWithUndo(new Set())
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [winesWithUndo])
+
   // Smoke test on mount
   useEffect(() => {
     pingWines().then(result => {
@@ -94,7 +118,7 @@ function App() {
       setWines(winesData)
     } catch (error) {
       console.error('Error loading wines:', error)
-      toast.error('Failed to load wines')
+      toast.error('Load failed')
     } finally {
       setLoading(false)
     }
@@ -109,7 +133,7 @@ function App() {
       }
     } catch (error) {
       console.error('Error fetching wine details:', error)
-      toast.error('Failed to load wine details')
+      toast.error('Load failed')
     }
   }
 
@@ -118,24 +142,88 @@ function App() {
     const originalWines = [...wines]
     const originalWine = wines.find(w => w.id === id)
     
-    // Optimistic update
+    if (!originalWine) return
+    
+    // Determine new status and optimistic update
+    const newStatus = originalWine.status === WineStatus.DRUNK ? WineStatus.CELLARED : WineStatus.DRUNK
     const today = new Date().toISOString().split('T')[0]
+    
     setWines(prev => prev.map(wine => 
       wine.id === id 
-        ? { ...wine, status: 'Drunk' as WineStatus, drank_on: today }
+        ? { 
+            ...wine, 
+            status: newStatus, 
+            drank_on: newStatus === WineStatus.DRUNK ? today : undefined 
+          }
         : wine
     ))
     
+    // Add to undo set
+    setWinesWithUndo(prev => new Set(prev).add(id))
+    
     try {
-      await markDrunk(id)
-      toast.success('Marked as drunk', {
-        duration: 6000
-      })
+      if (newStatus === WineStatus.DRUNK) {
+        await markDrunk(id)
+        // Visual feedback: wine moves to "Drunk" section
+      } else {
+        await updateWine(id, { status: WineStatus.CELLARED, drank_on: undefined })
+        // Visual feedback: wine moves to "Cellared" section
+      }
     } catch (error) {
       // Revert on error
       setWines(originalWines)
-      console.error('Error marking wine as drunk:', error)
-      toast.error('Failed to mark wine as drunk')
+      setWinesWithUndo(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(id)
+        return newSet
+      })
+      console.error('Error updating wine status:', error)
+      toast.error('Update failed')
+    }
+  }
+
+  const handleUndo = async (id: string) => {
+    // Store original state for potential rollback
+    const originalWines = [...wines]
+    const originalWine = wines.find(w => w.id === id)
+    
+    if (!originalWine) return
+    
+    // Determine new status and optimistic update
+    const newStatus = originalWine.status === WineStatus.DRUNK ? WineStatus.CELLARED : WineStatus.DRUNK
+    const today = new Date().toISOString().split('T')[0]
+    
+    setWines(prev => prev.map(wine => 
+      wine.id === id 
+        ? { 
+            ...wine, 
+            status: newStatus, 
+            drank_on: newStatus === WineStatus.DRUNK ? today : undefined 
+          }
+        : wine
+    ))
+    
+    // Remove from undo set
+    setWinesWithUndo(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(id)
+      return newSet
+    })
+    
+    try {
+      if (newStatus === WineStatus.DRUNK) {
+        await markDrunk(id)
+        // Visual feedback: wine moves to "Drunk" section
+      } else {
+        await updateWine(id, { status: WineStatus.CELLARED, drank_on: undefined })
+        // Visual feedback: wine moves to "Cellared" section
+      }
+    } catch (error) {
+      // Revert on error
+      setWines(originalWines)
+      setWinesWithUndo(prev => new Set(prev).add(id))
+      console.error('Error updating wine status:', error)
+      toast.error('Update failed')
     }
   }
 
@@ -169,10 +257,10 @@ function App() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
-        <div className="container max-w-[var(--container)] px-6 py-4 border-b">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Wines de Louton</h1>
-            <div className="flex items-center gap-2">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Wines de Louton</h1>
+            <div className="flex flex-wrap items-center gap-2 md:gap-3">
               {import.meta.env.DEV && (
                 <CsvImportButton onImportComplete={loadWines} />
               )}
@@ -189,6 +277,15 @@ function App() {
                   <Grid3X3 className="h-4 w-4" />
                 )}
               </Button>
+              <Button
+                variant={gridViewMode ? "primary" : "outline"}
+                size="sm"
+                onClick={() => setGridViewMode(!gridViewMode)}
+                className="min-w-[44px]"
+                title={gridViewMode ? "Exit placement mode" : "Enter placement mode"}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
               <Button onClick={handleAddWine} className="bg-accent text-white hover:brightness-110 rounded-xl px-4 py-2">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Bottle
@@ -199,9 +296,9 @@ function App() {
       </header>
 
       {/* Main Content */}
-      <div className="container max-w-[var(--container)] px-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Controls */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 sm:gap-4">
           <ControlsBar value={controls} onChange={setControls} />
         </div>
 
@@ -212,7 +309,7 @@ function App() {
           </div>
         ) : wines.length === 0 ? (
           <div className="text-center py-16">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">No wines found</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">No wines found</h2>
             <p className="text-gray-600 mb-8 max-w-md mx-auto">
               {controls.search || controls.status !== 'All' || controls.country_code || controls.region || controls.bottle_size !== 'All' || controls.vintageMin || controls.vintageMax
                 ? "No wines match your current filters. Try adjusting your search criteria."
@@ -250,14 +347,18 @@ function App() {
             </Button>
           </div>
         ) : (
-          <WineGrid
-            wines={wines}
-            loading={loading}
-            onWineClick={handleWineClick}
-            onMarkDrunk={handleMarkDrunk}
-            onAddWine={handleAddWine}
-            density={gridDensity}
-          />
+        <WineGrid
+          wines={wines}
+          loading={loading}
+          onWineClick={handleWineClick}
+          onMarkDrunk={handleMarkDrunk}
+          onUndo={handleUndo}
+          onAddWine={handleAddWine}
+          onWineUpdated={handleWineUpdated}
+          density={gridDensity}
+          winesWithUndo={winesWithUndo}
+          gridViewMode={gridViewMode}
+        />
         )}
       </div>
 
@@ -290,6 +391,12 @@ function App() {
           onWineUpdated={handleWineUpdated}
         />
       )}
+
+      {/* Toast Host */}
+      <ToastHost />
+
+      {/* QA Checklist Overlay - Dev Only */}
+      <QAChecklistOverlay />
     </div>
   )
 }

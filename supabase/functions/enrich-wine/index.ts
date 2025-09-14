@@ -16,25 +16,11 @@ interface EnrichmentRequest {
   country_code?: string
 }
 
-interface AiEnrichment {
-  tasting_notes?: string
-  drink_window?: {
-    from_year: number
-    to_year: number
-    drink_now: boolean
-  }
-  possible_scores?: {
-    wine_spectator?: {
-      score: number
-      source_url?: string
-    }
-    james_suckling?: {
-      score: number
-      source_url?: string
-    }
-  }
-  sources?: string[]
-  confidence: number
+interface AIEnrichment {
+  drink_window?: { from?: number; to?: number; source?: string[] };
+  tasting_notes?: { text: string; source?: string[] };
+  critic_scores?: { wine_spectator?: number; james_suckling?: number; source?: string[] };
+  food_pairings?: { items: string[]; source?: string[] };
 }
 
 serve(async (req) => {
@@ -85,15 +71,16 @@ serve(async (req) => {
             role: 'system',
             content: `You are a wine expert. Provide detailed information about wines in JSON format. 
             For each wine, provide:
-            - tasting_notes: Detailed tasting notes (string)
-            - drink_window: Object with from_year, to_year (numbers), and drink_now (boolean)
-            - possible_scores: Object with wine_spectator and james_suckling scores (50-100) and optional source_url
-            - sources: Array of source names (strings)
-            - confidence: Confidence score between 0 and 1 (number)
+            - drink_window: Object with from (number), to (number), and source (array of strings)
+            - tasting_notes: Object with text (string) and source (array of strings)
+            - critic_scores: Object with wine_spectator (number), james_suckling (number), and source (array of strings)
+            - food_pairings: Object with items (array of strings) and source (array of strings)
+            - confidence: Number between 0 and 1 indicating your confidence in the information
             
-            Be conservative with confidence scores. Only provide high confidence (0.8+) for well-known wines.
-            For lesser-known wines, provide lower confidence scores (0.3-0.7).
-            If you're not confident about the wine, set confidence below 0.75.
+            All fields are optional. Only include fields you have confident information about.
+            For scores, use 50-100 range. For drink_window years, use actual years (e.g., 2020, 2025).
+            Include source information when available (e.g., ["Wine Spectator", "James Suckling"]).
+            Be conservative with confidence scores - only provide high confidence (0.8+) for well-known wines.
             
             Return only valid JSON, no other text.`
           },
@@ -121,25 +108,66 @@ serve(async (req) => {
     }
 
     // Parse AI response
-    let aiEnrichment: AiEnrichment
+    let rawResponse: any
     try {
-      aiEnrichment = JSON.parse(aiContent)
+      rawResponse = JSON.parse(aiContent)
     } catch (parseError) {
       console.error('Failed to parse AI response:', aiContent)
       throw new Error('Invalid JSON response from AI')
     }
 
-    // Validate and set default confidence if missing
-    if (typeof aiEnrichment.confidence !== 'number') {
-      aiEnrichment.confidence = 0.5
+    // Normalize the response to match AIEnrichment type
+    const normalizeEnrichment = (raw: any): { enrichment: AIEnrichment; confidence: number } => {
+      const enrichment: AIEnrichment = {}
+      
+      // Normalize drink_window
+      if (raw.drink_window) {
+        enrichment.drink_window = {
+          from: raw.drink_window.from,
+          to: raw.drink_window.to,
+          source: raw.drink_window.source || ["OpenAI"]
+        }
+      }
+      
+      // Normalize tasting_notes
+      if (raw.tasting_notes) {
+        enrichment.tasting_notes = {
+          text: raw.tasting_notes.text || raw.tasting_notes,
+          source: raw.tasting_notes.source || ["OpenAI"]
+        }
+      }
+      
+      // Normalize critic_scores
+      if (raw.critic_scores) {
+        enrichment.critic_scores = {
+          wine_spectator: raw.critic_scores.wine_spectator,
+          james_suckling: raw.critic_scores.james_suckling,
+          source: raw.critic_scores.source || ["OpenAI"]
+        }
+      }
+      
+      // Normalize food_pairings
+      if (raw.food_pairings) {
+        enrichment.food_pairings = {
+          items: raw.food_pairings.items || raw.food_pairings,
+          source: raw.food_pairings.source || ["OpenAI"]
+        }
+      }
+      
+      // Extract confidence
+      const confidence = typeof raw.confidence === 'number' ? raw.confidence : 0.5
+      
+      return { enrichment, confidence }
     }
 
-    // Ensure confidence is between 0 and 1
-    aiEnrichment.confidence = Math.max(0, Math.min(1, aiEnrichment.confidence))
+    const { enrichment, confidence } = normalizeEnrichment(rawResponse)
 
-    // Return the enrichment data
+    // Return the normalized enrichment data with confidence
     return new Response(
-      JSON.stringify(aiEnrichment),
+      JSON.stringify({
+        ...enrichment,
+        confidence
+      }),
       { 
         status: 200, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
