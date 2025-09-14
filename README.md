@@ -5,34 +5,46 @@ A modern wine catalog application built with Vite + React + TypeScript + Tailwin
 ## Features
 
 - **Wine Catalog Management**: Add, edit, and organize your wine collection
+- **Cellar Visualization**: Visual grid interface for wine storage management
 - **AI Enrichment**: Automatic wine information enrichment using OpenAI
 - **Smart Filtering**: Search and filter wines by various criteria
 - **Responsive Design**: iOS-inspired UI that works on all devices
 - **Real-time Updates**: Live data synchronization with Supabase
 - **Wine Tracking**: Track drinking status, ratings, and tasting notes
+- **Occupancy Management**: Prevent double-booking with collision detection
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 18+ 
+- Docker Desktop (for local development)
 - A Supabase account
 - An OpenAI API key
 
-### 1. Database Setup
+### 1. Environment Setup
 
-1. Create a new Supabase project
-2. Run the SQL schema from `wines.sql` in your Supabase SQL editor
-3. Note your project URL and anon key
-
-### 2. Environment Configuration
-
-1. Copy your Supabase URL and anon key
-2. Update `src/lib/supabase.ts`:
-   ```typescript
-   const SUPABASE_URL = 'your-supabase-url'
-   const SUPABASE_ANON_KEY = 'your-supabase-anon-key'
+1. Copy the environment file:
+   ```bash
+   cp .env.example .env
    ```
+
+2. For **local development**:
+   - Start Docker Desktop
+   - Run `supabase start` to start local Supabase
+   - The `.env` file already contains local development values
+
+3. For **production**:
+   - Update `.env` with your actual Supabase project values:
+   ```bash
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+### 2. Database Setup
+
+1. **Local Development**: Run `supabase db reset` to apply the schema
+2. **Production**: Run the SQL schema from `wines.sql` in your Supabase SQL editor
 
 ### 3. Deploy Edge Function
 
@@ -60,31 +72,50 @@ Visit `http://localhost:5173` to see your wine catalog!
 
 ```
 src/
-├── components/          # React components
-│   ├── ui/             # Reusable UI primitives
-│   ├── ControlsBar.tsx # Search and filter controls
-│   ├── WineCard.tsx    # Individual wine card
-│   ├── WineGrid.tsx    # Wine grid layout
-│   ├── WineSheet.tsx   # Add/edit wine form
-│   └── WineDetailDrawer.tsx # Wine detail view
-├── data/               # Data layer
-│   ├── wines.ts        # Wine CRUD operations
-│   └── enrich.ts       # AI enrichment client
-├── lib/                # Utilities
-│   ├── supabase.ts     # Supabase client
-│   ├── format.ts       # Display formatting
-│   └── utils.ts        # General utilities
-└── types.ts            # TypeScript definitions
+├── components/                    # React components
+│   ├── ui/                       # Reusable UI primitives
+│   ├── ControlsBar.tsx           # Search and filter controls
+│   ├── CellarManagement.tsx      # Cellar visualization interface
+│   ├── CellarVisualization.tsx   # Interactive cellar grid
+│   ├── LocationChip.tsx          # Location display component
+│   └── Navigation.tsx            # View switcher
+├── features/                     # Feature-based organization
+│   ├── cellar/                   # Cellar management
+│   │   ├── components/           # Cellar-specific components
+│   │   └── data/                 # Cellar data operations
+│   ├── wines/                    # Wine collection
+│   │   ├── components/           # Wine-specific components
+│   │   └── data/                 # Wine data operations
+│   └── enrichment/               # AI enrichment
+│       ├── components/           # Enrichment UI
+│       └── data/                 # Enrichment logic
+├── hooks/                        # Custom React hooks
+│   ├── useCellar.ts              # Cellar state management
+│   └── useWineActions.ts         # Wine operations
+├── lib/                          # Utilities
+│   ├── supabase.ts               # Supabase client
+│   ├── format.ts                 # Display formatting
+│   └── utils.ts                  # General utilities
+└── types.ts                      # TypeScript definitions
 ```
 
 ## Database Schema
 
+### Wine Collection
 The `wines` table includes:
 - Basic wine information (producer, vintage, region, etc.)
 - Logistics (bottle size, location, purchase info)
 - Ratings and notes (Peyton & Louis ratings)
 - Critic scores (Wine Spectator, James Suckling)
 - AI enrichment data (JSONB with confidence score)
+
+### Cellar Management
+The cellar system includes:
+- **`fridge_layout`**: Configurable fridge dimensions (shelves × columns)
+- **`cellar_slots`**: Wine assignments with shelf/column/depth positioning
+- **`depth_position`**: Front/Back positioning enum
+- **Collision detection**: Prevents double-booking of slots
+- **Occupancy queries**: Real-time availability tracking
 
 ## AI Enrichment
 
