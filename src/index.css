@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Design tokens */
+  --container: 72rem; /* 1152px */
+  --radius-card: 1rem; /* rounded-2xl approx */
+  --shadow-card: 0 1px 2px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.06);
+  --border: 220 14% 90%;
+  --muted: 215 16% 46%;
+  --accent: 221 83% 53%;
+}
+
+html, body, #root { height: 100%; }
+body { @apply bg-white text-neutral-900 antialiased; }
+
+h1,h2,h3 { @apply tracking-tight; }
+button { @apply rounded-xl; }
+label { @apply text-gray-900 font-medium; }
+
+/* Global utility classes */
+.surface { 
+  @apply rounded-[var(--radius-card)] border border-neutral-200/70 bg-white shadow-card; 
+}
+
+.section { 
+  @apply px-5 py-4 sm:px-6 sm:py-5; 
+}
+
+.divider { 
+  @apply border-t border-neutral-200/70; 
+}
+
+.muted { 
+  @apply text-sm text-neutral-600; 
+}
+
+.eyebrow { 
+  @apply text-[11px] uppercase tracking-wide text-neutral-500; 
+}
