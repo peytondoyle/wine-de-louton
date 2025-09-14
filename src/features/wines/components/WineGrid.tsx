@@ -1,6 +1,6 @@
-import type { Wine } from '../types'
+import type { Wine } from '../../../types'
 import { WineCard } from './WineCard'
-import { Button } from './ui/Button'
+import { Button } from '../../../components/ui/Button'
 import { Plus, Wine as WineIcon } from 'lucide-react'
 
 interface WineGridProps {

@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase'
-import type { AIEnrichment } from '../types'
-import { updateWine } from './wines'
+import { supabase } from '../../../lib/supabase'
+import type { AIEnrichment } from '../../../types'
+import { updateWine } from '../../wines/data/wines'
 
 interface EnrichmentRequest {
   id: string

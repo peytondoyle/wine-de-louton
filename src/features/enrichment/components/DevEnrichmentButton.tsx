@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
-import { Button } from './ui/Button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/DropdownMenu'
+import { Button } from '../../../components/ui/Button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../../components/ui/DropdownMenu'
 import { Sparkles, ChevronDown } from 'lucide-react'
-import { updateWine } from '../data/wines'
-import { toast } from '../lib/toast'
-import type { Wine, AIEnrichment } from '../types'
+import { updateWine } from '../../wines/data/wines'
+import { toast } from '../../../lib/toast'
+import type { Wine, AIEnrichment } from '../../../types'
 
 interface DevEnrichmentButtonProps {
   wine: Wine

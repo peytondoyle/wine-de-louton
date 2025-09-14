@@ -1,24 +1,25 @@
 import React, { useState } from 'react'
-import type { Wine } from '../types'
-import { WineStatus } from '../types'
-import { displayWineTitle, displayTitle, countryFlag, stateBadge, formatSize, formatDate, countryName } from '../lib/format'
+import type { Wine } from '../../../types'
+import { WineStatus } from '../../../types'
+import { displayWineTitle, displayTitle, countryFlag, stateBadge, formatSize, formatDate, countryName } from '../../../lib/format'
 import { updateWine, getWine } from '../data/wines'
-import { requestEnrichment } from '../data/enrich'
-import { cn } from '../lib/utils'
+import { requestEnrichment } from '../../enrichment/data/enrich'
+import { cn } from '../../../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/Dialog'
-import { Button } from './ui/Button'
-import { Badge } from './ui/Badge'
-import { Label } from './ui/Label'
-import { ConfidenceBadge } from './ConfidenceBadge'
-import { Section, SectionDivider } from './ui/Section'
-import { useScrollLock } from '../hooks/useScrollLock'
-import { useKeyboardFocus } from '../hooks/useKeyboardFocus'
-import DrawerFooterActions from './DrawerFooterActions'
-import { useWineActions } from '../hooks/useWineActions'
-import EnrichmentReviewPanel from './EnrichmentReviewPanel'
-import { EmptyRow } from './EmptyRow'
-import { DevEnrichmentButton } from './DevEnrichmentButton'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/Dialog'
+import { Button } from '../../../components/ui/Button'
+import { Badge } from '../../../components/ui/Badge'
+import { Label } from '../../../components/ui/Label'
+import { ConfidenceBadge } from '../../enrichment/components/ConfidenceBadge'
+import { Section, SectionDivider } from '../../../components/ui/Section'
+import { useScrollLock } from '../../../hooks/useScrollLock'
+import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
+import { useZoomGuard } from '../../../hooks/useZoomGuard'
+import DrawerFooterActions from '../../../components/DrawerFooterActions'
+import { useWineActions } from '../../../hooks/useWineActions'
+import EnrichmentReviewPanel from '../../enrichment/components/EnrichmentReviewPanel'
+import { EmptyRow } from '../../cellar/components/EmptyRow'
+import { DevEnrichmentButton } from '../../enrichment/components/DevEnrichmentButton'
 import { 
   Pencil, 
   Star, 
@@ -37,8 +38,8 @@ import {
   Sparkles,
   Trash2
 } from 'lucide-react'
-import { toast } from '../lib/toast'
-import { toastError } from '../utils/toastMessages'
+import { toast } from '../../../lib/toast'
+import { toastError } from '../../../utils/toastMessages'
 
 /*
  * QA CHECKLIST - WineDetailDrawer
@@ -173,9 +174,12 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
     onWineUpdated,
     onEditWine: onEdit,
     onReEnrichSuccess: () => {
-      // Scroll to top and reveal suggestions on successful re-enrich
-      heroRef.current?.scrollIntoView({ behavior: 'smooth' })
+      // Reveal suggestions and scroll to them on successful re-enrich
       setHideSuggestions(false)
+      // Small delay to ensure the panel is rendered before scrolling
+      setTimeout(() => {
+        suggestionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
     }
   })
   const titleId = React.useId()
@@ -183,6 +187,9 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
 
   // Lock scroll when drawer is open
   useScrollLock(!!wine)
+  
+  // Prevent zooming when drawer is open
+  useZoomGuard(!!wine)
   
   // Handle iOS keyboard focus management
   const scrollAreaRef = useKeyboardFocus(!!wine)
@@ -256,6 +263,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
         aria-labelledby={titleId}
         aria-describedby={descId}
         className="p-0"
+        title={displayTitle(wine)}
       >
         <p id={descId} className="sr-only">
           Detail view for this wine. Sections include Overview, Drinking Guidance, Ratings and Critic Scores.
@@ -315,7 +323,6 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                       Generated {formatDistanceToNow(new Date(wine.ai_refreshed_at))} ago
                     </span>
                   )}
-                  <DevEnrichmentButton wine={wine} onWineUpdated={onWineUpdated} />
                 </div>
               </div>
 

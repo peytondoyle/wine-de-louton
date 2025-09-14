@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase'
-import type { Wine, WineSort, WineFormData, AIEnrichment } from '../types'
-import { WineStatus } from '../types'
+import { supabase } from '../../../lib/supabase'
+import type { Wine, WineSort, WineFormData, AIEnrichment } from '../../../types'
+import { WineStatus } from '../../../types'
 
 /**
  * Lists wines with optional filtering and sorting
@@ -88,9 +88,14 @@ export async function getWine(id: string): Promise<Wine | null> {
  * Inserts a new wine
  */
 export async function insertWine(wine: WineFormData): Promise<Wine> {
+  const wineWithHousehold = {
+    ...wine,
+    household_id: 'default_household'
+  }
+  
   const { data, error } = await supabase
     .from('wines')
-    .insert([wine])
+    .insert([wineWithHousehold])
     .select()
     .single()
 

@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
-import { Wine, AIEnrichment } from '../types'
-import { applyDrinkWindow, applyTastingNotes, applyCriticScores, dismissAIField, dismissAllAI } from '../data/wines'
-import { Button } from './ui/Button'
-import { Card } from './ui/Card'
-import { Label } from './ui/Label'
+import { Wine, AIEnrichment } from '../../../types'
+import { applyDrinkWindow, applyTastingNotes, applyCriticScores, dismissAIField, dismissAllAI } from '../../wines/data/wines'
+import { Button } from '../../../components/ui/Button'
+import { Card } from '../../../components/ui/Card'
+import { Label } from '../../../components/ui/Label'
 import { Check, Loader2, X, Info } from 'lucide-react'
 import { ConfidenceBadge } from './ConfidenceBadge'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/Tooltip'
-import { generateDiff } from '../lib/diff'
-import { track } from '../lib/analytics'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../components/ui/Tooltip'
+import { generateDiff } from '../../../lib/diff'
+import { track } from '../../../lib/analytics'
+import { useEnrichmentConfirmations } from '../../../hooks/useEnrichmentConfirmations'
+import { cn } from '../../../lib/utils'
 
 interface EnrichmentReviewPanelProps {
   wine: Wine
@@ -38,12 +40,20 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
   const [error, setError] = useState<ErrorState>({ field: null, action: null, message: '' })
   const [ariaLiveMessage, setAriaLiveMessage] = useState('')
   const fieldRefs = useRef<{ [key in keyof AIEnrichment]?: HTMLDivElement | null }>({})
+  
+  // Enhanced confirmation system
+  const { confirmations, showConfirmation, reset } = useEnrichmentConfirmations()
 
   if (!wine.ai_enrichment) {
     return null
   }
 
   const enrichment = wine.ai_enrichment
+
+  // Reset confirmations when wine changes
+  useEffect(() => {
+    reset()
+  }, [wine.id, reset])
 
   // Keyboard event handler for Enter/Esc shortcuts
   const handleKeyDown = useCallback((event: React.KeyboardEvent, field: keyof AIEnrichment, action: 'apply' | 'dismiss') => {
@@ -85,6 +95,11 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
       
       setSuccess({ field, action: 'apply' })
       setAriaLiveMessage(`${field.replace('_', ' ')} applied`)
+      
+      // Show enhanced confirmation with checkmark and toast
+      showConfirmation(field)
+      
+      // Clear success state after 2 seconds
       setTimeout(() => {
         setSuccess({ field: null, action: null })
         setAriaLiveMessage('')
@@ -102,7 +117,7 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
     } finally {
       setLoading({ field: null, action: null })
     }
-  }, [wine.id, wine.ai_confidence, onApplied])
+  }, [wine.id, wine.ai_confidence, onApplied, showConfirmation])
 
   const handleDismiss = useCallback(async (field: keyof AIEnrichment) => {
     setLoading({ field, action: 'dismiss' })
@@ -170,6 +185,66 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
       setLoading({ field: null, action: null })
     }
   }, [wine.id, wine.ai_confidence, onDismissed])
+
+  const handleApplyAll = useCallback(async () => {
+    setLoading({ field: 'all', action: 'apply' })
+    setError({ field: null, action: null, message: '' })
+    try {
+      const fields = Object.keys(enrichment) as (keyof AIEnrichment)[]
+      let appliedCount = 0
+      
+      for (const field of fields) {
+        if (enrichment[field]) {
+          try {
+            switch (field) {
+              case 'drink_window':
+                await applyDrinkWindow(wine.id, enrichment[field])
+                break
+              case 'tasting_notes':
+                await applyTastingNotes(wine.id, (enrichment[field] as any).text)
+                break
+              case 'critic_scores':
+                await applyCriticScores(wine.id, enrichment[field])
+                break
+              case 'food_pairings':
+                // Food pairings don't have a direct field to apply to, so we'll just dismiss
+                await dismissAIField(wine.id, field)
+                break
+            }
+            appliedCount++
+          } catch (fieldError) {
+            console.error(`Error applying ${field}:`, fieldError)
+          }
+        }
+      }
+      
+      // Track successful apply all action
+      track('enrichment_apply_all', {
+        wine_id: wine.id,
+        applied_count: appliedCount,
+        confidence: wine.ai_confidence
+      })
+      
+      setSuccess({ field: 'all', action: 'apply' })
+      setAriaLiveMessage(`Applied ${appliedCount} suggestions`)
+      setTimeout(() => {
+        setSuccess({ field: null, action: null })
+        setAriaLiveMessage('')
+      }, 2000)
+      onApplied?.()
+    } catch (error) {
+      console.error('Error applying all AI:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Apply all failed'
+      setError({ field: 'all', action: 'apply', message: errorMessage })
+      setAriaLiveMessage(`Apply all failed: ${errorMessage}`)
+      setTimeout(() => {
+        setError({ field: null, action: null, message: '' })
+        setAriaLiveMessage('')
+      }, 5000)
+    } finally {
+      setLoading({ field: null, action: null })
+    }
+  }, [wine.id, wine.ai_confidence, onApplied, enrichment])
 
   const getCurrentValue = useCallback((field: keyof AIEnrichment) => {
     switch (field) {
@@ -291,10 +366,17 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
   }) => {
     if (!suggestedValue) return null
 
+    const isShowingConfirmation = confirmations.field === field && confirmations.isVisible
+
     return (
       <div 
         ref={(el) => { fieldRefs.current[field] = el }}
-        className="border border-neutral-200 rounded-lg p-4 space-y-3 bg-white"
+        className={cn(
+          "border rounded-lg p-4 space-y-3 bg-white transition-all duration-300",
+          isShowingConfirmation 
+            ? "border-green-300 bg-green-50 shadow-md" 
+            : "border-neutral-200"
+        )}
         role="region"
         aria-labelledby={`${field}-title`}
       >
@@ -303,19 +385,37 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
             <div className="flex items-center gap-2 mb-2">
               <Label id={`${field}-title`} className="text-sm font-medium text-neutral-900">{title}</Label>
               <SourceTooltip field={field} />
+              {isShowingConfirmation && (
+                <div className="flex items-center gap-1 text-green-600 animate-in fade-in-0 zoom-in-95 duration-200">
+                  <Check className="h-4 w-4" />
+                  <span className="text-xs font-medium">Applied</span>
+                </div>
+              )}
             </div>
             
-            {/* Current value - only show if different from suggested */}
-            {currentValue !== suggestedValue && currentValue && (
-              <div className="text-sm text-neutral-600 mb-2">
-                <span className="font-medium">Current:</span> {currentValue}
+            {/* Current → Suggested format */}
+            <div className="space-y-2">
+              {/* Current value - only show if different from suggested */}
+              {currentValue !== suggestedValue && currentValue && (
+                <div className="text-sm text-neutral-600 bg-neutral-50 p-3 rounded border">
+                  <span className="font-medium text-neutral-700">Current:</span> {currentValue}
+                </div>
+              )}
+              
+              {/* Arrow indicator */}
+              {currentValue !== suggestedValue && currentValue && (
+                <div className="flex items-center justify-center text-neutral-400">
+                  <div className="w-6 h-6 rounded-full bg-neutral-100 flex items-center justify-center">
+                    <span className="text-xs">→</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Suggested value with diff highlighting */}
+              <div className="text-sm text-neutral-900 bg-blue-50 p-3 rounded border border-blue-200">
+                <span className="font-medium text-blue-700">Suggested:</span>{' '}
+                <span dangerouslySetInnerHTML={{ __html: getDiff(field)?.html || suggestedValue }} />
               </div>
-            )}
-            
-            {/* Suggested value with diff highlighting */}
-            <div className="text-sm text-neutral-900 bg-neutral-50 p-3 rounded border">
-              <span className="font-medium text-neutral-700">Suggested:</span>{' '}
-              <span dangerouslySetInnerHTML={{ __html: getDiff(field)?.html || suggestedValue }} />
             </div>
             
             {isFieldError(field) && (
@@ -382,7 +482,25 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
         >
           {ariaLiveMessage}
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handleApplyAll}
+              disabled={loading.field === 'all'}
+              className={isFieldError('all') && error.action === 'apply' ? 'border-red-300 text-red-600' : ''}
+            >
+              {loading.field === 'all' && loading.action === 'apply' ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-2" />
+              ) : isFieldSuccess('all') && success.action === 'apply' ? (
+                <Check className="h-3 w-3 text-green-600 mr-2" />
+              ) : isFieldError('all') && error.action === 'apply' ? (
+                <X className="h-3 w-3 text-red-600 mr-2" />
+              ) : null}
+              Apply All
+            </Button>
+          </div>
           <Button
             size="sm"
             variant="outline"

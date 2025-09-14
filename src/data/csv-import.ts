@@ -1,5 +1,5 @@
-import { insertWine } from './wines'
-import { requestEnrichment } from './enrich'
+import { insertWine } from '../features/wines/data/wines'
+import { requestEnrichment } from '../features/enrichment/data/enrich'
 import type { WineFormData } from '../types'
 import { BottleSize, WineStatus } from '../types'
 

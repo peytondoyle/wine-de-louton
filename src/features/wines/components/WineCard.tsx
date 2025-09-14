@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import type { Wine } from '../types'
-import { WineStatus } from '../types'
-import { displayWineTitle, countryFlag, stateBadge, formatSize, countryName } from '../lib/format'
-import { Badge } from './ui/Badge'
-import { Button } from './ui/Button'
+import type { Wine } from '../../../types'
+import { WineStatus } from '../../../types'
+import { displayWineTitle, countryFlag, stateBadge, formatSize, countryName } from '../../../lib/format'
+import { Badge } from '../../../components/ui/Badge'
+import { Button } from '../../../components/ui/Button'
 import { MapPin, Wine as WineIcon, WineOff, Check, Undo2, Sparkles } from 'lucide-react'
-import { cn } from '../lib/utils'
-import { DevEnrichmentButton } from './DevEnrichmentButton'
+import { cn } from '../../../lib/utils'
+import { DevEnrichmentButton } from '../../enrichment/components/DevEnrichmentButton'
 
 interface WineCardProps {
   wine: Wine

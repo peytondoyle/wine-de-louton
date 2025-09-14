@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Wine, AIEnrichment } from '../../types'
-import { WineStatus, BottleSize } from '../../types'
+import type { Wine, AIEnrichment } from '../../../../types'
+import { WineStatus, BottleSize } from '../../../../types'
 
 // Mock supabase before importing the module
 const mockSupabase = vi.hoisted(() => ({
   from: vi.fn()
 }))
 
-vi.mock('../../lib/supabase', () => ({
+vi.mock('../../../../lib/supabase', () => ({
   supabase: mockSupabase
 }))
 
@@ -25,6 +25,7 @@ describe('AI Enrichment Patch Helpers', () => {
     id: 'test-wine-id',
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
+    household_id: 'test-household',
     producer: 'Test Producer',
     varietals: ['Cabernet Sauvignon'],
     bottle_size: BottleSize.STANDARD_750ML,

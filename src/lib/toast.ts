@@ -22,11 +22,26 @@ export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   
   addToast: (toast) => {
+    const now = Date.now()
+    const DEDUPE_WINDOW_MS = 3000 // 3 seconds for better deduplication
+    
+    // Check for duplicate toasts within the dedupe window
+    const existingToast = useToastStore.getState().toasts.find(t => 
+      t.message === toast.message && 
+      t.variant === toast.variant && 
+      (now - t.createdAt) < DEDUPE_WINDOW_MS
+    )
+    
+    if (existingToast) {
+      // Reset the timer for the existing toast
+      return existingToast.id
+    }
+    
     const id = Math.random().toString(36).substr(2, 9)
     const newToast: Toast = {
       ...toast,
       id,
-      createdAt: Date.now(),
+      createdAt: now,
       duration: toast.duration ?? (toast.variant === 'loading' ? 0 : 5000)
     }
     
@@ -88,5 +103,16 @@ export const toast = {
     useToastStore.getState().dismissToast(id),
     
   dismissAll: () => 
-    useToastStore.getState().dismissAll()
+    useToastStore.getState().dismissAll(),
+    
+  // Batch operations for collapsing multiple events
+  batchSuccess: (count: number, action: string) => {
+    const message = count === 1 ? `${action} applied` : `${action} applied to ${count} items`
+    return useToastStore.getState().addToast({ variant: 'success', message })
+  },
+  
+  batchError: (count: number, action: string) => {
+    const message = count === 1 ? `Failed to ${action}` : `Failed to ${action} ${count} items`
+    return useToastStore.getState().addToast({ variant: 'error', message })
+  }
 }

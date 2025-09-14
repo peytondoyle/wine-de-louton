@@ -2,16 +2,18 @@ import { useState, useEffect } from 'react'
 import { Plus, Wine as WineIcon, X, Grid3X3, Grid2X2, LayoutGrid } from 'lucide-react'
 import type { Wine, ControlsState, BottleSize, WineSortField, WineSortDirection } from './types'
 import { WineStatus } from './types'
-import { listWines, getWine, markDrunk, updateWine } from './data/wines'
+import { listWines, getWine, markDrunk, updateWine } from './features/wines/data/wines'
 import { pingWines } from './data/_smoke'
 import { ControlsBar } from './components/ControlsBar'
-import { WineGrid } from './components/WineGrid'
-import { WineSheet } from './components/WineSheet'
-import { WineDetailDrawer } from './components/WineDetailDrawer'
+import { WineGrid } from './features/wines/components/WineGrid'
+import { WineSheet } from './features/wines/components/WineSheet'
+import { WineDetailDrawer } from './features/wines/components/WineDetailDrawer'
 import { CsvImportButton } from './components/CsvImportButton'
 import { Button } from './components/ui/Button'
 import { ToastHost } from './components/ToastHost'
 import { QAChecklistOverlay } from './components/QAChecklistOverlay'
+import { Navigation } from './components/Navigation'
+import { CellarManagement } from './components/CellarManagement'
 import { toast } from './lib/toast'
 import { toastDrunk, toastError } from './utils/toastMessages'
 
@@ -24,6 +26,10 @@ function App() {
   const [editingWine, setEditingWine] = useState<Wine | null>(null)
   const [showEmptyStateTip, setShowEmptyStateTip] = useState(true)
   const [winesWithUndo, setWinesWithUndo] = useState<Set<string>>(new Set())
+  const [currentView, setCurrentView] = useState<'wines' | 'cellar'>(() => {
+    const saved = localStorage.getItem('wine-app-view')
+    return (saved === 'wines' || saved === 'cellar') ? saved : 'wines'
+  })
   const [gridDensity, setGridDensity] = useState<'compact' | 'comfortable'>(() => {
     const saved = localStorage.getItem('wine-grid-density')
     return (saved === 'compact' || saved === 'comfortable') ? saved : 'comfortable'
@@ -77,6 +83,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('wine-grid-view-mode', gridViewMode.toString())
   }, [gridViewMode])
+
+  // Save current view to localStorage
+  useEffect(() => {
+    localStorage.setItem('wine-app-view', currentView)
+  }, [currentView])
 
   // Auto-remove wines from undo set after 5 seconds
   useEffect(() => {
@@ -259,33 +270,40 @@ function App() {
       <header className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 border-b">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Wines de Louton</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Wines de Louton</h1>
+              <Navigation currentView={currentView} onViewChange={setCurrentView} />
+            </div>
             <div className="flex flex-wrap items-center gap-2 md:gap-3">
-              {import.meta.env.DEV && (
-                <CsvImportButton onImportComplete={loadWines} />
+              {currentView === 'wines' && (
+                <>
+                  {import.meta.env.DEV && (
+                    <CsvImportButton onImportComplete={loadWines} />
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setGridDensity(gridDensity === 'compact' ? 'comfortable' : 'compact')}
+                    className="min-w-[44px]"
+                    title={`Switch to ${gridDensity === 'compact' ? 'comfortable' : 'compact'} view`}
+                  >
+                    {gridDensity === 'compact' ? (
+                      <Grid2X2 className="h-4 w-4" />
+                    ) : (
+                      <Grid3X3 className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    variant={gridViewMode ? "primary" : "outline"}
+                    size="sm"
+                    onClick={() => setGridViewMode(!gridViewMode)}
+                    className="min-w-[44px]"
+                    title={gridViewMode ? "Exit placement mode" : "Enter placement mode"}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </Button>
+                </>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setGridDensity(gridDensity === 'compact' ? 'comfortable' : 'compact')}
-                className="min-w-[44px]"
-                title={`Switch to ${gridDensity === 'compact' ? 'comfortable' : 'compact'} view`}
-              >
-                {gridDensity === 'compact' ? (
-                  <Grid2X2 className="h-4 w-4" />
-                ) : (
-                  <Grid3X3 className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant={gridViewMode ? "primary" : "outline"}
-                size="sm"
-                onClick={() => setGridViewMode(!gridViewMode)}
-                className="min-w-[44px]"
-                title={gridViewMode ? "Exit placement mode" : "Enter placement mode"}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
               <Button onClick={handleAddWine} className="bg-accent text-white hover:brightness-110 rounded-xl px-4 py-2">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Bottle
@@ -297,68 +315,74 @@ function App() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Controls */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 sm:gap-4">
-          <ControlsBar value={controls} onChange={setControls} />
-        </div>
+        {currentView === 'wines' ? (
+          <>
+            {/* Controls */}
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 sm:gap-4">
+              <ControlsBar value={controls} onChange={setControls} />
+            </div>
 
-        {/* Wine Grid */}
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <p className="text-muted-foreground text-lg">Loading…</p>
-          </div>
-        ) : wines.length === 0 ? (
-          <div className="text-center py-16">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">No wines found</h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              {controls.search || controls.status !== 'All' || controls.country_code || controls.region || controls.bottle_size !== 'All' || controls.vintageMin || controls.vintageMax
-                ? "No wines match your current filters. Try adjusting your search criteria."
-                : "Start building your wine collection by adding your first bottle."
-              }
-            </p>
-            
-            {/* Empty State Tip */}
-            {!controls.search && controls.status === 'All' && !controls.country_code && !controls.region && controls.bottle_size === 'All' && !controls.vintageMin && !controls.vintageMax && showEmptyStateTip && (
-              <div className="mb-8 max-w-lg mx-auto">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-sm font-medium text-blue-900 mb-1">💡 Quick Start Tip</h3>
-                      <p className="text-sm text-blue-700">
-                        You only need to enter the <strong>producer</strong> to add a wine. 
-                        AI will automatically suggest drink windows, scores, and tasting notes!
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setShowEmptyStateTip(false)}
-                      className="ml-2 text-blue-400 hover:text-blue-600"
-                      aria-label="Dismiss tip"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+            {/* Wine Grid */}
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <p className="text-muted-foreground text-lg">Loading…</p>
               </div>
+            ) : wines.length === 0 ? (
+              <div className="text-center py-16">
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">No wines found</h2>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  {controls.search || controls.status !== 'All' || controls.country_code || controls.region || controls.bottle_size !== 'All' || controls.vintageMin || controls.vintageMax
+                    ? "No wines match your current filters. Try adjusting your search criteria."
+                    : "Start building your wine collection by adding your first bottle."
+                  }
+                </p>
+                
+                {/* Empty State Tip */}
+                {!controls.search && controls.status === 'All' && !controls.country_code && !controls.region && controls.bottle_size === 'All' && !controls.vintageMin && !controls.vintageMax && showEmptyStateTip && (
+                  <div className="mb-8 max-w-lg mx-auto">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-sm font-medium text-blue-900 mb-1">💡 Quick Start Tip</h3>
+                          <p className="text-sm text-blue-700">
+                            You only need to enter the <strong>producer</strong> to add a wine. 
+                            AI will automatically suggest drink windows, scores, and tasting notes!
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowEmptyStateTip(false)}
+                          className="ml-2 text-blue-400 hover:text-blue-600"
+                          aria-label="Dismiss tip"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <Button onClick={handleAddWine} className="bg-accent hover:bg-accent/90 text-white">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Bottle
+                </Button>
+              </div>
+            ) : (
+            <WineGrid
+              wines={wines}
+              loading={loading}
+              onWineClick={handleWineClick}
+              onMarkDrunk={handleMarkDrunk}
+              onUndo={handleUndo}
+              onAddWine={handleAddWine}
+              onWineUpdated={handleWineUpdated}
+              density={gridDensity}
+              winesWithUndo={winesWithUndo}
+              gridViewMode={gridViewMode}
+            />
             )}
-            
-            <Button onClick={handleAddWine} className="bg-accent hover:bg-accent/90 text-white">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Your First Bottle
-            </Button>
-          </div>
+          </>
         ) : (
-        <WineGrid
-          wines={wines}
-          loading={loading}
-          onWineClick={handleWineClick}
-          onMarkDrunk={handleMarkDrunk}
-          onUndo={handleUndo}
-          onAddWine={handleAddWine}
-          onWineUpdated={handleWineUpdated}
-          density={gridDensity}
-          winesWithUndo={winesWithUndo}
-          gridViewMode={gridViewMode}
-        />
+          <CellarManagement className="mt-4" />
         )}
       </div>
 

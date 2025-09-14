@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { TextArea } from './ui/TextArea'
 import { Label } from './ui/Label'
 import { useScrollLock } from '../hooks/useScrollLock'
+import { useZoomGuard } from '../hooks/useZoomGuard'
 import { importWinesFromCsv, generateSampleCsv } from '../data/csv-import'
 import { toast } from '../lib/toast'
 import { toastError } from '../utils/toastMessages'
@@ -22,6 +23,9 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
 
   // Lock scroll when dialog is open
   useScrollLock(isOpen)
+  
+  // Prevent zooming when dialog is open
+  useZoomGuard(isOpen)
 
   const handleImport = async () => {
     if (!csvContent.trim()) {
@@ -78,6 +82,7 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
         <DialogContent 
           aria-labelledby="csv-import-title"
           aria-describedby="csv-import-description"
+          title="CSV Import"
           className="
             fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
             rounded-2xl border border-neutral-200/70

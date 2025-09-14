@@ -55,6 +55,8 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
   const variantStyles = getVariantStyles(toast.variant)
   const Icon = variantStyles.icon
 
+  const isError = toast.variant === 'error'
+  
   return (
     <div
       className={cn(
@@ -65,8 +67,8 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
           : 'translate-y-2 opacity-0 scale-95',
         variantStyles.className
       )}
-      role="alert"
-      aria-live="polite"
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
     >
       <Icon 
         className={cn(
@@ -97,7 +99,11 @@ export function ToastHost() {
   const { toasts, dismissToast } = useToastStore()
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-50">
+    <div 
+      className="fixed inset-0 pointer-events-none z-50"
+      aria-live="polite"
+      aria-label="Notifications"
+    >
       {/* Desktop: top-right */}
       <div className="hidden sm:block absolute top-4 right-4 space-y-2">
         {toasts.map((toast) => (

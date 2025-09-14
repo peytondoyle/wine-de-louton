@@ -2,26 +2,27 @@ import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import type { Wine, WineFormData } from '../types'
-import { BottleSize, WineStatus } from '../types'
+import type { Wine, WineFormData } from '../../../types'
+import { BottleSize, WineStatus } from '../../../types'
 import { insertWine, updateWine } from '../data/wines'
-import { requestEnrichment } from '../data/enrich'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/Dialog'
-import { Button } from './ui/Button'
-import DrawerFooterActions from './DrawerFooterActions'
-import { Input } from './ui/Input'
-import { TextArea } from './ui/TextArea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select'
-import { Label } from './ui/Label'
-import { PillInput } from './ui/PillInput'
-import { Field } from './ui/Field'
-import { VarietalsInput } from './VarietalsInput'
-import { Section, SectionDivider } from './ui/Section'
-import { useScrollLock } from '../hooks/useScrollLock'
-import { useKeyboardFocus } from '../hooks/useKeyboardFocus'
+import { requestEnrichment } from '../../enrichment/data/enrich'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/Dialog'
+import { Button } from '../../../components/ui/Button'
+import DrawerFooterActions from '../../../components/DrawerFooterActions'
+import { Input } from '../../../components/ui/Input'
+import { TextArea } from '../../../components/ui/TextArea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/Select'
+import { Label } from '../../../components/ui/Label'
+import { PillInput } from '../../../components/ui/PillInput'
+import { Field } from '../../../components/ui/Field'
+import { VarietalsInput } from '../../../components/VarietalsInput'
+import { Section, SectionDivider } from '../../../components/ui/Section'
+import { useScrollLock } from '../../../hooks/useScrollLock'
+import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
+import { useZoomGuard } from '../../../hooks/useZoomGuard'
 import { ChevronDown, Pencil, X, Wine as WineIcon } from 'lucide-react'
-import { toast } from '../lib/toast'
-import { toastAddSuccess, toastSaveSuccess, toastError } from '../utils/toastMessages'
+import { toast } from '../../../lib/toast'
+import { toastAddSuccess, toastSaveSuccess, toastError } from '../../../utils/toastMessages'
 
 /*
  * QA CHECKLIST - WineSheet
@@ -232,6 +233,9 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
   // Lock scroll when sheet is open
   useScrollLock(true)
   
+  // Prevent zooming when sheet is open
+  useZoomGuard(true)
+  
   // Handle iOS keyboard focus management
   const scrollAreaRef = useKeyboardFocus(true)
 
@@ -414,6 +418,7 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
         aria-labelledby={titleId}
         aria-describedby={descId}
         className="p-0"
+        title={mode === 'add' ? 'Add New Wine' : 'Edit Wine'}
       >
         <DialogHeader className="px-5 sm:px-6 py-5 sm:py-6 border-b border-neutral-200/80">
           <DialogTitle id={titleId}>

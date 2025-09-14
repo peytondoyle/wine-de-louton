@@ -24,5 +24,5 @@ export const menuSeparator = "my-1 h-px bg-neutral-200/70"
 export const quietCard =
   "rounded-xl border border-neutral-200/70 bg-white shadow-sm " +
   "hover:shadow-md hover:translate-y-[1px] hover:border-neutral-200 active:translate-y-0 " +
-  "transition-all duration-150 motion-reduce:transform-none " +
+  "motion-safe:transition-shadow motion-safe:transition-transform motion-safe:duration-150 motion-reduce:transition-none " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white"

@@ -13,6 +13,11 @@ export enum WineStatus {
   DRUNK = 'Drunk'
 }
 
+export enum DepthPosition {
+  FRONT = 'front',
+  BACK = 'back'
+}
+
 // AI Enrichment interface - field-by-field structure
 export type AIEnrichment = {
   drink_window?: { from?: number; to?: number; source?: string[] };
@@ -26,6 +31,7 @@ export interface Wine {
   id: string;
   created_at: string;
   updated_at: string;
+  household_id: string;
   vintage?: number;
   producer: string;
   vineyard?: string;
@@ -80,6 +86,49 @@ export interface WineSort {
 
 // Form types
 export type WineFormData = Partial<Omit<Wine, 'id' | 'created_at' | 'updated_at' | 'average_rating'>>;
+
+// Cellar interfaces
+export interface FridgeLayout {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  household_id: string;
+  fridge_id: string;
+  shelves: number;
+  columns: number;
+  name: string;
+}
+
+export interface CellarSlot {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  household_id: string;
+  wine_id?: string;
+  fridge_id: string;
+  shelf: number;
+  column_position: number;
+  depth: DepthPosition;
+}
+
+export interface OccupancySlot {
+  shelf: number;
+  column_position: number;
+  depth: DepthPosition;
+  wine_id?: string;
+  wine_producer?: string;
+  wine_name?: string;
+  wine_vintage?: number;
+  is_occupied: boolean;
+}
+
+export interface FridgeOccupancy {
+  layout: FridgeLayout;
+  slots: OccupancySlot[];
+  total_slots: number;
+  occupied_slots: number;
+  occupancy_percentage: number;
+}
 
 // UI state types
 export interface ControlsState {

@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { toast } from '../lib/toast'
 import type { Wine } from '../types'
 import { WineStatus } from '../types'
-import { updateWine, deleteWine } from '../data/wines'
-import { requestEnrichment } from '../data/enrich'
+import { updateWine, deleteWine } from '../features/wines/data/wines'
+import { requestEnrichment } from '../features/enrichment/data/enrich'
 import { toastDrunk, toastReenrichQueued, toastError } from '../utils/toastMessages'
 
 interface UseWineActionsOptions {

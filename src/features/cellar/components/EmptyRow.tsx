@@ -1,6 +1,6 @@
 import React from 'react'
 import { Info, Star, FileText, Award } from 'lucide-react'
-import { Button } from './ui/Button'
+import { Button } from '../../../components/ui/Button'
 
 export type EmptyRowType = 'ratings' | 'tasting-notes' | 'critic-scores' | 'general'
 

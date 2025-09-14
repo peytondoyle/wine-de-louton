@@ -35,53 +35,91 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <div 
-      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain"
-      style={{ 
-        touchAction: 'pan-y',
-        overscrollBehavior: 'contain'
-      }}
-    >
-      <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
-        <DialogPrimitive.Content
-          ref={ref}
-          className={cn(
-            "relative w-full max-w-lg mx-auto bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden focus:outline-none",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out",
-            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-            "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
-            "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
-            "motion-reduce:transition-opacity motion-reduce:data-[state=open]:opacity-100 motion-reduce:data-[state=closed]:opacity-0",
-            "motion-reduce:data-[state=open]:scale-100 motion-reduce:data-[state=closed]:scale-95",
-            className
-          )}
-          style={{
-            touchAction: 'manipulation',
-            overscrollBehavior: 'contain'
-          }}
-          onInteractOutside={(e) => {
-            // do not close when interacting with suggestion popovers/menus
-            if ((e.target as HTMLElement)?.closest?.('[data-allow-outside]')) {
-              e.preventDefault();
-            }
-          }}
-          {...props}
-        >
-          {children}
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        </DialogPrimitive.Content>
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    title?: string
+  }
+>(({ className, children, title, ...props }, ref) => {
+  const [isOpen, setIsOpen] = React.useState(false)
+  const ariaLiveRef = React.useRef<HTMLDivElement>(null)
+
+  // Announce dialog opening/closing
+  React.useEffect(() => {
+    if (isOpen && title && ariaLiveRef.current) {
+      ariaLiveRef.current.textContent = `Opened dialog: ${title}`
+    } else if (!isOpen && ariaLiveRef.current) {
+      ariaLiveRef.current.textContent = ''
+    }
+  }, [isOpen, title])
+
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      {/* ARIA live region for dialog announcements */}
+      <div
+        ref={ariaLiveRef}
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      />
+      <div 
+        className="fixed inset-0 z-50 overflow-y-auto overscroll-contain"
+        style={{ 
+          touchAction: 'pan-y',
+          overscrollBehavior: 'contain'
+        }}
+      >
+        <div className="flex min-h-full items-center justify-center p-3 sm:p-6">
+          <DialogPrimitive.Content
+            ref={ref}
+            className={cn(
+              "relative w-full max-w-lg mx-auto bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden focus:outline-none",
+              "data-[state=open]:animate-in data-[state=closed]:animate-out",
+              "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+              "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
+              "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+              "motion-reduce:transition-opacity motion-reduce:data-[state=open]:opacity-100 motion-reduce:data-[state=closed]:opacity-0",
+              "motion-reduce:data-[state=open]:scale-100 motion-reduce:data-[state=closed]:scale-95",
+              className
+            )}
+            style={{
+              touchAction: 'manipulation',
+              overscrollBehavior: 'contain'
+            }}
+            onInteractOutside={(e) => {
+              // Allow backdrop click to close
+              // do not close when interacting with suggestion popovers/menus
+              if ((e.target as HTMLElement)?.closest?.('[data-allow-outside]')) {
+                e.preventDefault();
+              }
+            }}
+            onOpenAutoFocus={(e) => {
+              // Prevent auto-focus to allow custom focus management
+              e.preventDefault()
+            }}
+            onCloseAutoFocus={(e) => {
+              // Prevent auto-focus to allow custom focus management
+              e.preventDefault()
+            }}
+            onEscapeKeyDown={(e) => {
+              // Allow escape to close - handled by Radix by default
+            }}
+            data-state={isOpen ? 'open' : 'closed'}
+            onAnimationStart={() => setIsOpen(true)}
+            onAnimationEnd={() => setIsOpen(false)}
+            {...props}
+          >
+            {children}
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:ring-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground min-h-[44px] min-w-[44px] flex items-center justify-center">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </div>
       </div>
-    </div>
-  </DialogPortal>
-))
+    </DialogPortal>
+  )
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 const DialogHeader = ({
