@@ -18,24 +18,12 @@ A modern wine catalog application built with Vite + React + TypeScript + Tailwin
 ### Prerequisites
 
 - Node.js 18+ 
-- Docker Desktop (for local development)
 - A Supabase account
 - An OpenAI API key
 
 ### 1. Environment Setup
 
-1. Copy the environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. For **local development**:
-   - Start Docker Desktop
-   - Run `supabase start` to start local Supabase
-   - The `.env` file already contains local development values
-
-3. For **production**:
-   - Update `.env` with your actual Supabase project values:
+1. Update `.env` with your Supabase project values:
    ```bash
    VITE_SUPABASE_URL=https://your-project-id.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-key
@@ -43,8 +31,8 @@ A modern wine catalog application built with Vite + React + TypeScript + Tailwin
 
 ### 2. Database Setup
 
-1. **Local Development**: Run `supabase db reset` to apply the schema
-2. **Production**: Run the SQL schema from `wines.sql` in your Supabase SQL editor
+1. Run the SQL schema from `wines.sql` in your Supabase SQL editor
+2. Or use the Supabase CLI: `supabase db push` (after linking your project)
 
 ### 3. Deploy Edge Function
 
