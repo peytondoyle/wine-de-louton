@@ -69,6 +69,7 @@ export interface Wine {
   ai_enrichment: AiEnrichment | null;
   ai_confidence?: number | null;
   ai_last_error?: string | null;
+  ai_refreshed_at?: string | null;
   average_rating?: number; // Generated column
 }
 

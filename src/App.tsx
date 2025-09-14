@@ -129,15 +129,7 @@ function App() {
     try {
       await markDrunk(id)
       toast.success('Marked as drunk', {
-        duration: 6000,
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            // Revert the change
-            setWines(originalWines)
-            toast.success('Undone')
-          }
-        }
+        duration: 6000
       })
     } catch (error) {
       // Revert on error

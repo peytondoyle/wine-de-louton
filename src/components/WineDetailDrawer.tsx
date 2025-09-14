@@ -5,11 +5,13 @@ import { displayWineTitle, displayTitle, countryFlag, stateBadge, formatSize, fo
 import { updateWine, getWine } from '../data/wines'
 import { retryEnrichment, requestEnrichment } from '../data/enrich'
 import { cn } from '../lib/utils'
+import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { Badge } from './ui/Badge'
 import { Label } from './ui/Label'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/DropdownMenu'
+import { ConfidenceMeter } from './ConfidenceMeter'
 import { 
   Edit, 
   Star, 
@@ -28,7 +30,8 @@ import {
   Store,
   Calendar,
   Pencil,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
@@ -110,38 +113,6 @@ const hasNotes = (wine: Wine) => !!(wine.peyton_notes || wine.louis_notes)
 const hasCritics = (wine: Wine) => !!(wine.score_wine_spectator || wine.score_james_suckling)
 
 
-// ConfidenceBadge component for AI confidence display
-function ConfidenceBadge({ confidence }: { confidence?: number }) {
-  if (confidence === null || confidence === undefined) {
-    return (
-      <Badge variant="neutral">
-        Unknown
-      </Badge>
-    )
-  }
-
-  const percentage = Math.round(confidence * 100)
-
-  if (confidence >= 0.75) {
-    return (
-      <Badge variant="success">
-        High ({percentage}%)
-      </Badge>
-    )
-  } else if (confidence >= 0.5) {
-    return (
-      <Badge variant="neutral">
-        Medium ({percentage}%)
-      </Badge>
-    )
-  } else {
-    return (
-      <Badge variant="danger">
-        Low ({percentage}%)
-      </Badge>
-    )
-  }
-}
 
 interface WineDetailDrawerProps {
   wine: Wine | null
@@ -155,12 +126,18 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   const [dismissing, setDismissing] = useState(false)
   const [hideSuggestions, setHideSuggestions] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [reenriching, setReenriching] = useState(false)
   const [lastAi, setLastAi] = useState<any>(null)
   const [lastConfidence, setLastConfidence] = useState<number | null>(null)
   const [undoTimer, setUndoTimer] = useState<NodeJS.Timeout | null>(null)
   const [cooldownUntil, setCooldownUntil] = useState<number>(0)
   const [showTastingNotes, setShowTastingNotes] = useState(false)
   const [compact, setCompact] = useState(false)
+  
+  // Re-enrich cooldown state
+  const COOLDOWN_S = 20
+  const [cooldown, setCooldown] = useState<number>(0)
+  const [reenrichError, setReenrichError] = useState<string | null>(null)
   const heroRef = React.useRef<HTMLDivElement>(null)
   const titleId = React.useId()
   const descId = React.useId()
@@ -206,6 +183,10 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
         clearTimeout(undoTimer)
         setUndoTimer(null)
       }
+      // Reset cooldown when switching wines
+      setCooldown(0)
+      // Clear re-enrich error when switching wines
+      setReenrichError(null)
     }
   }, [wine?.id, undoTimer])
 
@@ -218,6 +199,13 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
       }
     }
   }, [undoTimer])
+
+  // Cooldown timer
+  React.useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setInterval(() => setCooldown((s) => s - 1), 1000)
+    return () => clearInterval(t)
+  }, [cooldown])
 
   // Scroll observer for sticky header
   React.useEffect(() => {
@@ -274,21 +262,23 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
         setLastAi(wine.ai_enrichment)
         setLastConfidence(wine.ai_confidence ?? null)
         
+        // Apply the patch first
         await updateWine(wine.id, patch)
         
         // Clear AI fields so suggestions no longer exist
         await updateWine(wine.id, { ai_enrichment: null, ai_confidence: null })
         
-        setHideSuggestions(true)
+        // Get updated wine data
         const updatedWine = await getWine(wine.id)
         if (updatedWine) {
           onWineUpdated(updatedWine)
         }
         
-        // Show undo toast
-        toast.success('Applied suggestions', {
-          duration: 6000
-        })
+        // Show success toast
+        toast.success('Suggestions applied')
+        
+        // Hide suggestions panel AFTER successful update
+        setHideSuggestions(true)
         
         // Set timer to clear undo state after 6 seconds
         const timer = setTimeout(() => {
@@ -395,13 +385,11 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
     }
   }
 
-  const handleReEnrich = async () => {
-    // Check cooldown
-    if (Date.now() < cooldownUntil) {
-      toast('Please wait before re-enriching again')
-      return
-    }
+  const handleReenrich = async () => {
+    if (reenriching) return
     
+    setReenriching(true)
+    setReenrichError(null) // Clear any previous error
     try {
       const min = {
         id: wine.id,
@@ -412,27 +400,30 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
         region: wine.region ?? undefined,
         country_code: wine.country_code ?? undefined,
       }
-      const result = await requestEnrichment(min)
-      if (!result) {
-        toast('No suggestions returned')
+      const res = await requestEnrichment(min)
+      if (!res) {
+        setReenrichError('No suggestions returned. Check your connection and try again.')
         return
       }
       await updateWine(wine.id, {
-        ai_enrichment: result,
-        ai_confidence: result.confidence ?? 0,
+        ai_enrichment: res,
+        ai_confidence: res.confidence ?? null,
+        ai_refreshed_at: new Date().toISOString()
       })
       setHideSuggestions(false)
       const updatedWine = await getWine(wine.id)
       if (updatedWine) {
         onWineUpdated(updatedWine)
       }
-      toast.success('New suggestions ready')
+      toast.success('New suggestions ready.')
       
-      // Set cooldown
-      setCooldownUntil(Date.now() + 15000)
-    } catch (error) {
-      console.error('Error re-enriching:', error)
-      toast.error('Re-enrich failed')
+      // Start cooldown after successful re-enrich
+      setCooldown(COOLDOWN_S)
+    } catch (e) {
+      console.error('[AI] reenrich:error', e)
+      setReenrichError('Couldn\'t refresh suggestions. Check your connection and try again.')
+    } finally {
+      setReenriching(false)
     }
   }
 
@@ -470,10 +461,19 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem 
-                      onClick={async () => await handleReEnrich()}
-                      disabled={Date.now() < cooldownUntil}
+                      onClick={async () => await handleReenrich()}
+                      disabled={reenriching || cooldown > 0}
                     >
-                      Re-enrich Suggestions
+                      {reenriching ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Refreshing…
+                        </>
+                      ) : cooldown > 0 ? (
+                        `Re-enrich in ${cooldown}s`
+                      ) : (
+                        'Re-enrich Suggestions'
+                      )}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -511,10 +511,19 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem 
-                      onClick={async () => await handleReEnrich()}
-                      disabled={Date.now() < cooldownUntil}
+                      onClick={async () => await handleReenrich()}
+                      disabled={reenriching || cooldown > 0}
                     >
-                      Re-enrich Suggestions
+                      {reenriching ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Refreshing…
+                        </>
+                      ) : cooldown > 0 ? (
+                        `Re-enrich in ${cooldown}s`
+                      ) : (
+                        'Re-enrich Suggestions'
+                      )}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -522,15 +531,50 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
             </div>
           </header>
 
-          {/* AI Suggestions Panel */}
-          {showSuggestions && (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+          <Divider />
+
+          {/* Loading state for re-enrichment */}
+          {reenriching && (
+            <div className="py-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold">Suggested Enrichment</h3>
                   <p className="muted">Unverified — review before applying.</p>
                 </div>
-                <ConfidenceBadge confidence={wine.ai_confidence ?? undefined} />
+                <div className="flex items-center gap-2">
+                  <ConfidenceMeter value={wine.ai_confidence ?? undefined} />
+                  <span className="rounded-full border border-neutral-200/80 bg-neutral-50 px-2 py-0.5 text-[12px] text-neutral-600">
+                    <Loader2 className="mr-1 size-3 animate-spin inline" /> Refreshing…
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="h-3 w-1/3 rounded bg-neutral-200/60" />
+                <div className="h-3 w-2/3 rounded bg-neutral-200/50" />
+                <div className="h-3 w-1/2 rounded bg-neutral-200/50" />
+              </div>
+              <p className="mt-2 text-[12px] text-neutral-500">
+                AI enrichment from OpenAI. Review before applying.
+              </p>
+            </div>
+          )}
+
+          {/* AI Suggestions Panel */}
+          {showSuggestions && !reenriching && (
+            <div className="py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">Suggested Enrichment</h3>
+                  <p className="muted">Unverified — review before applying.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ConfidenceMeter value={wine.ai_confidence ?? undefined} />
+                  {wine.ai_refreshed_at && (
+                    <span className="rounded-full border border-neutral-200/80 bg-neutral-50 px-2 py-0.5 text-[12px] text-neutral-600">
+                      Updated {formatDistanceToNow(new Date(wine.ai_refreshed_at))} ago
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="mt-4 space-y-3">
@@ -583,24 +627,65 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
               <div className="mt-3 flex flex-col sm:flex-row gap-2">
                 <Button 
                   onClick={applySuggestions} 
-                  disabled={applying}
+                  disabled={applying || reenriching}
                   aria-busy={applying}
                   className="sm:w-auto w-full"
                 >
-                  <Check className="h-4 w-4 mr-2" />
-                  {applying ? 'Applying…' : 'Apply'}
+                  {applying ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Applying…
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Apply
+                    </>
+                  )}
                 </Button>
                 <Button 
                   onClick={dismissSuggestions} 
                   variant="outline" 
-                  disabled={dismissing}
+                  disabled={dismissing || reenriching}
                   aria-busy={dismissing}
                   className="sm:w-auto w-full"
                 >
-                  <X className="h-4 w-4 mr-2" />
-                  {dismissing ? 'Dismissing…' : 'Dismiss'}
+                  {dismissing ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Dismissing…
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-4 w-4 mr-2" />
+                      Dismiss
+                    </>
+                  )}
                 </Button>
               </div>
+              
+              {/* Re-enrich Error Display */}
+              {reenrichError && (
+                <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[13px] text-rose-800">
+                  {reenrichError}
+                  <div>
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      className="px-0" 
+                      disabled={reenriching}
+                      onClick={() => { setReenrichError(null); handleReenrich(); }}
+                    >
+                      {reenriching ? 'Retrying…' : 'Retry'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {/* AI Enrichment Footnote */}
+              <p className="mt-2 text-[12px] text-neutral-500">
+                AI enrichment from OpenAI. Review before applying.
+              </p>
             </div>
           )}
 
@@ -795,11 +880,22 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
           {/* Sticky footer action bar */}
           <div className="border-t border-neutral-200/70 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80 px-5 py-3">
             <div className="flex items-center justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => onEdit(wine)}>Edit</Button>
-              <Button variant="primary" size="sm" onClick={handleToggleStatus}>
+              <Button variant="outline" size="sm" onClick={() => onEdit(wine)} disabled={reenriching}>Edit</Button>
+              <Button variant="primary" size="sm" onClick={handleToggleStatus} disabled={reenriching}>
                 {wine.status === WineStatus.DRUNK ? 'Mark Cellared' : 'Mark Drunk'}
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleReEnrich} disabled={Date.now() < cooldownUntil}>Re-enrich</Button>
+              <Button variant="ghost" size="sm" onClick={handleReenrich} disabled={reenriching || cooldown > 0}>
+                {reenriching ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Refreshing…
+                  </>
+                ) : cooldown > 0 ? (
+                  `Re-enrich in ${cooldown}s`
+                ) : (
+                  'Re-enrich'
+                )}
+              </Button>
             </div>
           </div>
         </div>
