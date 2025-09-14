@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Upload, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/Dialog'
@@ -69,17 +69,21 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
       </Button>
 
       <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="
-          fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
-          rounded-2xl border border-neutral-200/70
-          bg-white supports-[backdrop-filter]:bg-white/95
-          shadow-xl outline-none max-h-[90vh] overflow-y-auto
-          data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95
-          data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95
-        ">
+        <DialogContent 
+          aria-labelledby="csv-import-title"
+          aria-describedby="csv-import-description"
+          className="
+            fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
+            rounded-2xl border border-neutral-200/70
+            bg-white supports-[backdrop-filter]:bg-white/95
+            shadow-xl outline-none max-h-[90vh] overflow-y-auto
+            data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95
+            data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95
+          "
+        >
           <DialogHeader>
-            <DialogTitle>CSV Import (DEV)</DialogTitle>
-            <DialogDescription>
+            <DialogTitle id="csv-import-title">CSV Import (DEV)</DialogTitle>
+            <DialogDescription id="csv-import-description">
               Import multiple wines from CSV. Only producer is required. 
               AI enrichment will be triggered automatically.
             </DialogDescription>

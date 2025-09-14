@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,6 +13,9 @@ import { TextArea } from './ui/TextArea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select'
 import { Label } from './ui/Label'
 import { PillInput } from './ui/PillInput'
+import { Field } from './ui/Field'
+import { VarietalsInput } from './VarietalsInput'
+import { ChevronDown } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 const wineSchema = z.object({
@@ -55,6 +58,79 @@ interface WineSheetProps {
 
 const BOTTLE_SIZES = Object.values(BottleSize)
 const WINE_STATUSES = Object.values(WineStatus)
+
+// Country data with flags
+const COUNTRIES = [
+  { code: 'FR', name: 'France', flag: '🇫🇷' },
+  { code: 'IT', name: 'Italy', flag: '🇮🇹' },
+  { code: 'ES', name: 'Spain', flag: '🇪🇸' },
+  { code: 'US', name: 'United States', flag: '🇺🇸' },
+  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+  { code: 'CH', name: 'Switzerland', flag: '🇨🇭' },
+  { code: 'AT', name: 'Austria', flag: '🇦🇹' },
+  { code: 'PT', name: 'Portugal', flag: '🇵🇹' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱' },
+  { code: 'ZA', name: 'South Africa', flag: '🇿🇦' },
+]
+
+// US States data
+const US_STATES = [
+  { code: 'AL', name: 'Alabama' },
+  { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' },
+  { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' },
+  { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' },
+  { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' },
+  { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' },
+  { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' },
+  { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' },
+  { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' },
+  { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' },
+  { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' },
+  { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' },
+  { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' },
+  { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' },
+  { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' },
+  { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' },
+  { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' },
+  { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' },
+  { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' },
+  { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' },
+  { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' },
+  { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' },
+  { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' },
+  { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' },
+  { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' },
+  { code: 'WY', name: 'Wyoming' },
+  { code: 'DC', name: 'District of Columbia' },
+]
 
 // Pretty print validity for debugging HTML constraints
 function validitySummary(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
@@ -262,10 +338,14 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
     }
   }
 
+  const titleId = React.useId()
+  const descId = React.useId()
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent 
-        aria-describedby="wine-sheet-description"
+        aria-labelledby={titleId}
+        aria-describedby={descId}
         className="
           fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
           rounded-2xl border border-neutral-200/70
@@ -276,10 +356,10 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
         "
       >
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle id={titleId}>
             {mode === 'add' ? 'Add New Wine' : 'Edit Wine'}
           </DialogTitle>
-          <DialogDescription id="wine-sheet-description">
+          <DialogDescription id={descId}>
             {mode === 'add' 
               ? 'Fill in the details below to add a new wine to your collection.' 
               : 'Update the wine details below.'}
@@ -293,114 +373,52 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900">Identity</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="producer" className="text-gray-900 font-medium">Producer</Label>
+              {/* Core always-visible fields */}
+              <Field
+                label="Producer"
+                required
+                helperText="Enter the producer's name (required)."
+                error={form.formState.errors.producer?.message}
+              >
                 <Input
                   id="producer"
                   required
                   {...form.register('producer')}
-                  placeholder="e.g., Domaine de la Côte"
+                  placeholder="Domaine de la Côte"
                   className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
                 />
-                <p className="text-xs text-gray-500">Required</p>
-                {form.formState.errors.producer && (
-                  <p className="text-sm text-destructive">
-                    {form.formState.errors.producer.message}
-                  </p>
-                )}
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="vintage">Vintage</Label>
+              <Field
+                label="Vintage"
+                helperText="Year the wine was produced (optional)."
+              >
                 <Input
                   id="vintage"
                   type="number"
                   value={form.watch('vintage') ?? ''}
                   onChange={(e) => form.setValue('vintage', e.target.value ? Number(e.target.value) : undefined)}
-                  placeholder="e.g., 2019"
+                  placeholder="2019"
                   className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="wine_name">Wine Name</Label>
-                <Input
-                  id="wine_name"
-                  {...form.register('wine_name')}
-                  placeholder="e.g., Les Pierres"
-                  className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="vineyard">Vineyard</Label>
-                <Input
-                  id="vineyard"
-                  {...form.register('vineyard')}
-                  placeholder="e.g., Les Pierres Vineyard"
-                  className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="appellation">Appellation</Label>
-                <Input
-                  id="appellation"
-                  {...form.register('appellation')}
-                  placeholder="e.g., Santa Rita Hills"
-                  className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="region">Region</Label>
+              <Field
+                label="Region"
+                helperText="Geographic region where the wine was produced (optional)."
+              >
                 <Input
                   id="region"
                   {...form.register('region')}
-                  placeholder="e.g., California"
+                  placeholder="California"
                   className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="country_code">Country Code</Label>
-                <Input
-                  id="country_code"
-                  {...form.register('country_code')}
-                  placeholder="e.g., US, FR"
-                  maxLength={2}
-                  className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="us_state">US State</Label>
-                <Input
-                  id="us_state"
-                  {...form.register('us_state')}
-                  placeholder="e.g., CA"
-                  maxLength={2}
-                  className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="varietals">Varietals</Label>
-                <PillInput
-                  value={form.watch('varietals')}
-                  onChange={(varietals) => form.setValue('varietals', varietals)}
-                  placeholder="Add varietals..."
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Logistics Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">Logistics</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="bottle_size">Bottle Size</Label>
+              <Field
+                label="Bottle Size"
+                helperText="Standard bottle size for this wine."
+              >
                 <Select
                   value={form.watch('bottle_size')}
                   onValueChange={(value) => form.setValue('bottle_size', value as BottleSize)}
@@ -416,7 +434,117 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
                     ))}
                   </SelectContent>
                 </Select>
+              </Field>
+            </div>
+
+            {/* Advanced fields disclosure */}
+            <details className="group mt-3">
+              <summary className="flex cursor-pointer select-none items-center gap-2 text-[13px] text-neutral-700">
+                <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                Advanced fields
+              </summary>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field
+                  label="Wine Name"
+                  helperText="Specific name of the wine (optional)."
+                >
+                  <Input
+                    id="wine_name"
+                    {...form.register('wine_name')}
+                    placeholder="Les Pierres"
+                    className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
+                  />
+                </Field>
+
+                <Field
+                  label="Appellation"
+                  helperText="Official wine region designation (optional)."
+                >
+                  <Input
+                    id="appellation"
+                    {...form.register('appellation')}
+                    placeholder="Santa Rita Hills"
+                    className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
+                  />
+                </Field>
+
+                <Field
+                  label="Vineyard"
+                  helperText="Specific vineyard where grapes were grown (optional)."
+                >
+                  <Input
+                    id="vineyard"
+                    {...form.register('vineyard')}
+                    placeholder="Les Pierres Vineyard"
+                    className="rounded-xl border px-3 py-2 text-gray-900 placeholder:text-gray-500"
+                  />
+                </Field>
+
+                <Field
+                  label="Country"
+                  helperText="Country where the wine was produced (optional)."
+                >
+                  <Select
+                    value={form.watch('country_code')}
+                    onValueChange={(value) => form.setValue('country_code', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map((country) => (
+                        <SelectItem key={country.code} value={country.code}>
+                          <span className="flex items-center gap-2">
+                            <span>{country.flag}</span>
+                            <span>{country.name}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                {form.watch('country_code') === 'US' && (
+                  <Field
+                    label="US State"
+                    helperText="State where the wine was produced (US only)."
+                  >
+                    <Select
+                      value={form.watch('us_state')}
+                      onValueChange={(value) => form.setValue('us_state', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {US_STATES.map((state) => (
+                          <SelectItem key={state.code} value={state.code}>
+                            {state.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+
+                <Field
+                  label="Varietals"
+                  helperText="Grape varieties used in this wine (optional)."
+                  className="sm:col-span-2"
+                >
+                  <VarietalsInput
+                    value={form.watch('varietals')}
+                    onChange={(varietals) => form.setValue('varietals', varietals)}
+                  />
+                </Field>
               </div>
+            </details>
+          </div>
+
+          {/* Logistics Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900">Logistics</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
               <div className="space-y-2">
                 <Label htmlFor="purchase_date">Purchase Date</Label>

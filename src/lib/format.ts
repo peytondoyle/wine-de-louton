@@ -160,3 +160,28 @@ export function displayWineTitle(w: Wine): string {
   // Default case
   return `${w.producer} — ${vintage}`
 }
+
+/**
+ * Displays wine title for hero header (simplified)
+ */
+export function displayTitle(w: Wine): string {
+  const vintage = w.vintage ? w.vintage.toString() : 'NV'
+  return `${w.producer} — ${vintage}`.trim()
+}
+
+/**
+ * Formats date to short month + year (e.g., "Sep 2025")
+ */
+export function formatDate(dateString?: string): string {
+  if (!dateString) return ''
+  
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      year: 'numeric' 
+    })
+  } catch {
+    return dateString
+  }
+}

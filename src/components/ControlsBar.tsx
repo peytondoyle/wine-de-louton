@@ -98,6 +98,7 @@ export function ControlsBar({ value, onChange }: ControlsBarProps) {
           variant="outline"
           onClick={() => setShowFilters(!showFilters)}
           className="min-w-[44px] rounded-xl border px-3 py-2"
+          aria-label="Toggle filters"
         >
           <Filter className="h-4 w-4" />
         </Button>
@@ -106,6 +107,7 @@ export function ControlsBar({ value, onChange }: ControlsBarProps) {
             variant="outline"
             onClick={clearFilters}
             className="min-w-[44px] rounded-xl border px-3 py-2"
+            aria-label="Clear all filters"
           >
             <X className="h-4 w-4" />
           </Button>

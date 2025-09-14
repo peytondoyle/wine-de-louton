@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
 import type { Wine } from '../types'
 import { WineStatus } from '../types'
-import { displayWineTitle, countryFlag, stateBadge, formatSize, countryName } from '../lib/format'
+import { displayWineTitle, displayTitle, countryFlag, stateBadge, formatSize, formatDate, countryName } from '../lib/format'
 import { updateWine, getWine } from '../data/wines'
 import { retryEnrichment, requestEnrichment } from '../data/enrich'
+import { cn } from '../lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/Dialog'
 import { Button } from './ui/Button'
 import { Badge } from './ui/Badge'
 import { Label } from './ui/Label'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/DropdownMenu'
 import { 
   Edit, 
   Star, 
@@ -17,9 +19,30 @@ import {
   X,
   Award,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  MoreHorizontal,
+  MapPin,
+  Wine as WineIcon,
+  WineOff,
+  Grid3X3,
+  Store,
+  Calendar,
+  Pencil,
+  Info
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+
+// Helper components
+const Divider = () => <div className="-mx-5 border-t border-neutral-200/70" />;
+
+function Section({ title, children, className }: React.PropsWithChildren<{ title: string; className?: string }>) {
+  return (
+    <section className={cn("py-3", className)}>
+      <h4 className="text-[11px] font-medium tracking-wide uppercase text-neutral-500 mb-2">{title}</h4>
+      <div>{children}</div>
+    </section>
+  );
+}
 
 // Field component for consistent field display
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -32,45 +55,88 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-// StatusPill component for status display
-function StatusPill({ status }: { status: WineStatus }) {
+// Chip component for displaying wine metadata
+const Chip = ({ icon, children }: { icon?: string; children: React.ReactNode }) => {
+  const IconComponent = icon ? getIconComponent(icon) : null
+  
   return (
-    <Badge 
-      variant={status === WineStatus.DRUNK ? "secondary" : "default"}
-      className="rounded-full px-2.5 py-0.5 text-xs"
-    >
-      {status === WineStatus.DRUNK ? 'Drunk' : 'Cellared'}
+    <Badge variant="neutral" className="inline-flex items-center gap-1">
+      {IconComponent && <IconComponent className="size-3.5 text-neutral-500" aria-hidden="true" />}
+      <span>{children}</span>
     </Badge>
   )
 }
+
+// StatusPill component for status display
+function StatusPill({ status }: { status: WineStatus }) {
+  return (
+    <Badge variant={status === WineStatus.DRUNK ? 'danger' : 'success'} className="inline-flex items-center gap-1">
+      {status === WineStatus.DRUNK ? (
+        <WineOff className="size-3.5" aria-hidden="true" />
+      ) : (
+        <Check className="size-3.5" aria-hidden="true" />
+      )}
+      {status === WineStatus.DRUNK ? "Drunk" : "Cellared"}
+    </Badge>
+  )
+}
+
+// Helper function to get icon components
+function getIconComponent(iconName: string) {
+  const iconMap: Record<string, any> = {
+    'map-pin': MapPin,
+    'wine': WineIcon,
+    'grid-3x3': Grid3X3,
+    'store': Store,
+    'calendar': Calendar,
+  }
+  return iconMap[iconName] || null
+}
+
+// Empty state component
+const Empty = ({ children, onAdd }: { children: React.ReactNode; onAdd?: () => void }) => (
+  <div className="flex items-start gap-2 text-neutral-600">
+    <Info className="mt-0.5 size-4 text-neutral-400" aria-hidden="true" />
+    <div className="flex-1">
+      <div className="text-[13px]">{children}</div>
+      {onAdd && <Button variant="ghost" size="sm" className="mt-1 px-0 h-7" onClick={onAdd}>Add now</Button>}
+    </div>
+  </div>
+)
+
+// Helper functions to determine if sections have content
+const hasRatings = (wine: Wine) => !!(wine.peyton_rating || wine.louis_rating || wine.average_rating)
+const hasNotes = (wine: Wine) => !!(wine.peyton_notes || wine.louis_notes)
+const hasCritics = (wine: Wine) => !!(wine.score_wine_spectator || wine.score_james_suckling)
+
 
 // ConfidenceBadge component for AI confidence display
 function ConfidenceBadge({ confidence }: { confidence?: number }) {
   if (confidence === null || confidence === undefined) {
     return (
-      <Badge variant="outline" className="bg-neutral-100 text-neutral-600 border-neutral-300">
+      <Badge variant="neutral">
         Unknown
       </Badge>
     )
   }
-  
+
   const percentage = Math.round(confidence * 100)
-  
+
   if (confidence >= 0.75) {
     return (
-      <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+      <Badge variant="success">
         High ({percentage}%)
       </Badge>
     )
   } else if (confidence >= 0.5) {
     return (
-      <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-300">
+      <Badge variant="neutral">
         Medium ({percentage}%)
       </Badge>
     )
   } else {
     return (
-      <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+      <Badge variant="danger">
         Low ({percentage}%)
       </Badge>
     )
@@ -89,13 +155,45 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   const [dismissing, setDismissing] = useState(false)
   const [hideSuggestions, setHideSuggestions] = useState(false)
   const [retrying, setRetrying] = useState(false)
-  const [showKebabMenu, setShowKebabMenu] = useState(false)
   const [lastAi, setLastAi] = useState<any>(null)
   const [lastConfidence, setLastConfidence] = useState<number | null>(null)
   const [undoTimer, setUndoTimer] = useState<NodeJS.Timeout | null>(null)
   const [cooldownUntil, setCooldownUntil] = useState<number>(0)
   const [showTastingNotes, setShowTastingNotes] = useState(false)
-  const descriptionId = React.useId()
+  const [compact, setCompact] = useState(false)
+  const heroRef = React.useRef<HTMLDivElement>(null)
+  const titleId = React.useId()
+  const descId = React.useId()
+
+  // Early return if wine is null
+  if (!wine) return null
+
+  // Copy title to clipboard
+  const handleCopyTitle = async () => {
+    try {
+      await navigator.clipboard.writeText(displayTitle(wine))
+      toast.success('Copied bottle title')
+    } catch (err) {
+      toast.error('Failed to copy')
+    }
+  }
+
+  // Handle double-click to edit
+  const handleTitleDoubleClick = () => {
+    onEdit(wine)
+  }
+
+  // Toggle wine status
+  const handleToggleStatus = async () => {
+    try {
+      const newStatus = wine.status === WineStatus.DRUNK ? WineStatus.CELLARED : WineStatus.DRUNK
+      const updatedWine = await updateWine(wine.id, { status: newStatus })
+      onWineUpdated(updatedWine)
+      toast.success(newStatus === WineStatus.DRUNK ? 'Marked as drunk' : 'Marked as cellared')
+    } catch (err) {
+      toast.error('Failed to update status')
+    }
+  }
 
   // Reset state when wine changes (different wine selected)
   React.useEffect(() => {
@@ -111,16 +209,6 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
     }
   }, [wine?.id, undoTimer])
 
-  // Close kebab menu when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (showKebabMenu) {
-        setShowKebabMenu(false)
-      }
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [showKebabMenu])
 
   // Cleanup undo timer on unmount
   React.useEffect(() => {
@@ -131,7 +219,21 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
     }
   }, [undoTimer])
 
-  if (!wine) return null
+  // Scroll observer for sticky header
+  React.useEffect(() => {
+    const hero = heroRef.current
+    if (!hero) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setCompact(!entry.isIntersecting)
+      },
+      { threshold: 0, rootMargin: '-24px 0px 0px 0px' }
+    )
+
+    observer.observe(hero)
+    return () => observer.disconnect()
+  }, [])
 
   const applySuggestions = async () => {
     if (!wine.ai_enrichment) return
@@ -338,77 +440,97 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   const showSuggestions = !hideSuggestions && wine.ai_enrichment
   const showError = wine.ai_last_error && !wine.ai_enrichment && !hideSuggestions
 
-  const titleId = React.useId()
-
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={descId}
         className="surface w-[min(720px,92vw)] fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50"
       >
-        <DialogHeader>
-          <DialogTitle id={titleId} className="flex items-center gap-2">
-            <span className="text-2xl" aria-label={`Country ${countryName(wine.country_code)}`}>
-              {countryFlag(wine.country_code)}
-            </span>
-            {displayWineTitle(wine)}
-          </DialogTitle>
-          <p id={descriptionId} className="sr-only">
-            Details for the selected wine bottle including identity, logistics, ratings, critic scores, and AI suggestions.
-          </p>
-        </DialogHeader>
-        
-        <div className="section space-y-4">
-          {/* Header row: actions on right */}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => onEdit(wine)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowKebabMenu(!showKebabMenu)}
-              >
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-              {showKebabMenu && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-neutral-200 rounded-md shadow-lg z-10">
-                  <button
-                    onClick={async () => {
-                      setShowKebabMenu(false)
-                      await handleReEnrich()
-                    }}
-                    disabled={Date.now() < cooldownUntil}
-                    className={`w-full px-4 py-2 text-left text-sm first:rounded-t-md last:rounded-b-md ${
-                      Date.now() < cooldownUntil
-                        ? 'text-neutral-400 cursor-not-allowed'
-                        : 'text-neutral-700 hover:bg-neutral-50'
-                    }`}
-                  >
-                    Re-enrich Suggestions
-                    {Date.now() < cooldownUntil && (
-                      <span className="ml-2 text-xs text-neutral-400">
-                        (cooldown)
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
+        <p id={descId} className="sr-only">
+          Detail view for this wine. Sections include Overview, Drinking Guidance, Ratings and Critic Scores.
+        </p>
+
+        <div className="max-h-[78vh] flex flex-col" style={{ isolation: 'isolate' }}>
+          {/* Sticky micro-header */}
+          <div className={`sticky top-0 z-10 -mx-5 -mt-3 px-5 py-3 bg-white/95 backdrop-blur-sm border-b border-neutral-200/80 shadow-sm transition-all duration-200 ${
+            compact ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
+          }`} style={{ isolation: 'isolate' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {countryFlag(wine.country_code)}
+                <span className="truncate font-medium text-neutral-900">{displayTitle(wine)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="ghost" className="text-xs" aria-label="More options">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                      onClick={async () => await handleReEnrich()}
+                      disabled={Date.now() < cooldownUntil}
+                    >
+                      Re-enrich Suggestions
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
 
+          {/* Scrollable content */}
+          <div className="min-h-0 overflow-auto px-5 pb-3">
+
+        <div className="px-5 py-0">
+          {/* Hero header */}
+          <header className="mb-3" ref={heroRef}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle id={titleId} className="flex items-center gap-2 text-xl sm:text-2xl font-semibold">
+                  <span aria-label={`Country ${countryName(wine.country_code)}`}>{countryFlag(wine.country_code)}</span>
+                  <span className="truncate">{displayTitle(wine)}</span>
+                </DialogTitle>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] leading-5 text-neutral-700">
+                  {wine.region && <Chip icon="map-pin">{wine.region}</Chip>}
+                  {wine.bottle_size && <Chip icon="wine">{formatSize(wine.bottle_size)}</Chip>}
+                  <StatusPill status={wine.status} />
+                </div>
+              </div>
+
+              {/* Optional: keep kebab menu in top-right */}
+              <div className="flex items-center gap-2 shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" aria-label="More actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                      onClick={async () => await handleReEnrich()}
+                      disabled={Date.now() < cooldownUntil}
+                    >
+                      Re-enrich Suggestions
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </header>
+
           {/* AI Suggestions Panel */}
           {showSuggestions && (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 mb-4">
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold">Suggested Enrichment</h3>
                   <p className="muted">Unverified — review before applying.</p>
                 </div>
-                <ConfidenceBadge confidence={wine.ai_confidence} />
+                <ConfidenceBadge confidence={wine.ai_confidence ?? undefined} />
               </div>
 
               <div className="mt-4 space-y-3">
@@ -419,6 +541,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                       variant="ghost"
                       className="justify-start p-0 h-auto hover:bg-transparent hover:text-inherit"
                       onClick={() => setShowTastingNotes(!showTastingNotes)}
+                      aria-label={showTastingNotes ? "Hide tasting notes" : "Show tasting notes"}
                     >
                       <Label className="text-sm font-medium text-neutral-900 cursor-pointer">
                         Tasting Notes
@@ -483,13 +606,13 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
 
           {/* AI Error Panel */}
           {showError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 mb-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-red-900">AI Suggestions</h3>
                   <p className="text-sm text-red-600">Couldn't fetch suggestions (tap to retry).</p>
                 </div>
-                <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+                <Badge variant="danger">
                   Error
                 </Badge>
               </div>
@@ -518,27 +641,29 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
             </div>
           )}
 
-          {/* Overview Section */}
-          <section>
-            <h4 className="eyebrow mb-2">Overview</h4>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-              <Field label="Producer" value={wine.producer} />
-              <Field label="Vintage" value={wine.vintage ?? 'NV'} />
-              <Field label="Region" value={wine.region} />
-              <Field label="Bottle Size" value={formatSize(wine.bottle_size)} />
-              <Field label="Status" value={<StatusPill status={wine.status} />} />
-              {wine.wine_name && <Field label="Wine Name" value={wine.wine_name} />}
-              {wine.vineyard && <Field label="Vineyard" value={wine.vineyard} />}
-              {wine.appellation && <Field label="Appellation" value={wine.appellation} />}
-              {wine.purchase_date && <Field label="Purchase Date" value={wine.purchase_date} />}
-              {wine.purchase_place && <Field label="Purchase Place" value={wine.purchase_place} />}
-              {wine.location_row && (
-                <Field 
-                  label="Location" 
-                  value={`Row ${wine.location_row}${wine.location_position ? `, Position ${wine.location_position}` : ''}`} 
-                />
-              )}
-              {wine.drank_on && <Field label="Drank On" value={wine.drank_on} />}
+          <Divider />
+          <Section title="Overview">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm leading-6">
+              <div>
+                <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Producer</div>
+                <div className="font-medium">{wine.producer}</div>
+              </div>
+              <div>
+                <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Vintage</div>
+                <div className="font-medium">{wine.vintage ?? 'NV'}</div>
+              </div>
+              <div>
+                <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Region</div>
+                <div className="font-medium">{wine.region}</div>
+              </div>
+              <div>
+                <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Bottle Size</div>
+                <div className="font-medium">{formatSize(wine.bottle_size)}</div>
+              </div>
+              <div className="col-span-2">
+                <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Status</div>
+                <StatusPill status={wine.status} />
+              </div>
             </div>
             {wine.varietals && wine.varietals.length > 0 && (
               <div className="mt-3">
@@ -552,12 +677,9 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                 </div>
               </div>
             )}
-          </section>
-          <div className="divider my-4" />
-
-          {/* Drinking Guidance Section */}
-          <section>
-            <h4 className="eyebrow mb-2">Drinking Guidance</h4>
+          </Section>
+          <Divider />
+          <Section title="Drinking Guidance">
             <div className="text-sm">
               {(wine.drink_window_from || wine.drink_window_to) ? (
                 <div className="flex items-center gap-2">
@@ -565,7 +687,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                   {wine.drink_now && <Badge className="ml-2">Drink now</Badge>}
                 </div>
               ) : (
-                <span className="muted">No drinking guidance yet.</span>
+                <Empty>No drinking guidance yet.</Empty>
               )}
             </div>
             {wine.companions && wine.companions.length > 0 && (
@@ -580,12 +702,9 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                 </div>
               </div>
             )}
-          </section>
-          <div className="divider my-4" />
-
-          {/* Ratings & Notes Section */}
-          <section>
-            <h4 className="eyebrow mb-2">Ratings & Notes</h4>
+          </Section>
+          <Divider />
+          <Section title="Ratings & Notes">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 {wine.peyton_rating && (
@@ -617,11 +736,8 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                 )}
               </div>
               
-              {!wine.peyton_rating && !wine.louis_rating && !wine.average_rating && (
-                <div className="flex items-center gap-2 text-sm text-neutral-400 italic">
-                  <AlertCircle className="h-4 w-4" />
-                  No ratings available
-                </div>
+              {!hasRatings(wine) && (
+                <Empty onAdd={() => onEdit(wine)}>No ratings yet.</Empty>
               )}
               
               {wine.peyton_notes && (
@@ -638,72 +754,53 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                 </div>
               )}
               
-              {!wine.peyton_notes && !wine.louis_notes && (
-                <div className="flex items-center gap-2 text-sm text-neutral-400 italic">
-                  <AlertCircle className="h-4 w-4" />
-                  No tasting notes available
-                </div>
+              {!hasNotes(wine) && (
+                <Empty onAdd={() => onEdit(wine)}>No tasting notes yet.</Empty>
               )}
             </div>
-          </section>
-          <div className="divider my-4" />
-
-          {/* Critic Scores Section */}
-          <section>
-            <h4 className="eyebrow mb-2">Critic Scores</h4>
+          </Section>
+          <Divider />
+          <Section title="Critic Scores">
             <div className="flex flex-wrap gap-2">
               {wine.score_wine_spectator && (
-                <Badge variant="outline" className="text-xs px-3 py-1 bg-blue-50 text-blue-700 border-blue-200">
+                <Badge variant="outline" className={`text-xs px-3 py-1 ${
+                  wine.score_wine_spectator >= 95 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : wine.score_wine_spectator >= 90
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
                   Wine Spectator: {wine.score_wine_spectator}
                 </Badge>
               )}
               {wine.score_james_suckling && (
-                <Badge variant="outline" className="text-xs px-3 py-1 bg-purple-50 text-purple-700 border-purple-200">
+                <Badge variant="outline" className={`text-xs px-3 py-1 ${
+                  wine.score_james_suckling >= 95 
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : wine.score_james_suckling >= 90
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
                   James Suckling: {wine.score_james_suckling}
                 </Badge>
               )}
-              {!wine.score_wine_spectator && !wine.score_james_suckling && (
-                <div className="flex items-center gap-2 text-sm text-neutral-400 italic">
-                  <AlertCircle className="h-4 w-4" />
-                  No critic scores available
-                </div>
+              {!hasCritics(wine) && (
+                <Empty>No critic scores yet.</Empty>
               )}
             </div>
-          </section>
+          </Section>
+          </div>
+          </div>
 
-          {/* Sticky Action Bar */}
-          <div className="sticky bottom-0 -mx-5 -mb-4 bg-white/90 backdrop-blur border-t px-5 py-3 flex items-center justify-end gap-2">
-            {!showSuggestions && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onEdit(wine)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                {wine.status === WineStatus.CELLARED && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      // Handle mark drunk logic here
-                      console.log('Mark drunk')
-                    }}
-                  >
-                    Mark Drunk
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleReEnrich}
-                  disabled={Date.now() < cooldownUntil}
-                >
-                  Re-enrich
-                </Button>
-              </>
-            )}
+          {/* Sticky footer action bar */}
+          <div className="border-t border-neutral-200/70 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80 px-5 py-3">
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => onEdit(wine)}>Edit</Button>
+              <Button variant="primary" size="sm" onClick={handleToggleStatus}>
+                {wine.status === WineStatus.DRUNK ? 'Mark Cellared' : 'Mark Drunk'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleReEnrich} disabled={Date.now() < cooldownUntil}>Re-enrich</Button>
+            </div>
           </div>
         </div>
       </DialogContent>
