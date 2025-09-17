@@ -14,8 +14,8 @@ export enum WineStatus {
 }
 
 export enum DepthPosition {
-  FRONT = 'front',
-  BACK = 'back'
+  FRONT = 1,
+  BACK = 2
 }
 
 // AI Enrichment interface - field-by-field structure
@@ -109,6 +109,7 @@ export interface CellarSlot {
   shelf: number;
   column_position: number;
   depth: DepthPosition;
+  depth_position?: number; // Alternative field name for database compatibility
 }
 
 export interface OccupancySlot {

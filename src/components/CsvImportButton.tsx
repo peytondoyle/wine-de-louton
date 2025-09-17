@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Upload, Download, AlertCircle, CheckCircle, X } from 'lucide-react'
+import { Upload, Download, AlertCircle, AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/Dialog'
 import { TextArea } from './ui/TextArea'
@@ -19,7 +19,7 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [csvContent, setCsvContent] = useState('')
   const [isImporting, setIsImporting] = useState(false)
-  const [importResult, setImportResult] = useState<{ success: number; errors: string[] } | null>(null)
+  const [importResult, setImportResult] = useState<{ success: number; errors: string[]; warnings: string[] } | null>(null)
 
   // Lock scroll when dialog is open
   useScrollLock(isOpen)
@@ -47,6 +47,10 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
       
       if (result.errors.length > 0) {
         toast.error(`${result.errors.length} imports failed`)
+      }
+      
+      if (result.warnings.length > 0) {
+        toast.error(`${result.warnings.length} warnings during import`)
       }
     } catch (error) {
       console.error('CSV import error:', error)
@@ -84,7 +88,7 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
           aria-describedby="csv-import-description"
           title="CSV Import"
           className="
-            fixed left-1/2 top-1/2 z-50 w-[min(720px,92vw)] -translate-x-1/2 -translate-y-1/2
+            w-[min(720px,92vw)]
             rounded-2xl border border-neutral-200/70
             bg-white supports-[backdrop-filter]:bg-white/95
             shadow-xl outline-none max-h-[90vh] overflow-y-auto overscroll-none
@@ -133,6 +137,22 @@ export function CsvImportButton({ onImportComplete }: CsvImportButtonProps) {
                     Successfully imported {importResult.success} wines
                   </span>
                 </div>
+                
+                {importResult.warnings.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <span className="text-sm text-yellow-600">
+                        {importResult.warnings.length} warnings:
+                      </span>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto text-xs text-yellow-700 bg-yellow-50 p-2 rounded">
+                      {importResult.warnings.map((warning, index) => (
+                        <div key={index}>{warning}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 
                 {importResult.errors.length > 0 && (
                   <div className="space-y-1">

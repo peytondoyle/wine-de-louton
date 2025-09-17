@@ -49,7 +49,7 @@ export function useEnrichmentConfirmations() {
     }
     
     // Show new toast
-    toastIdRef.current = toast.success(message, 2000)
+    toastIdRef.current = toast.success(message, { duration: 2000 })
   }, [confirmations.appliedFields])
 
   const reset = useCallback(() => {

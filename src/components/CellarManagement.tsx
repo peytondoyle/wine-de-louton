@@ -9,12 +9,16 @@ import { Select } from './ui/Select'
 import { Badge } from './ui/Badge'
 import { useCellar } from '../hooks/useCellar'
 import { getFridgeLayouts } from '../features/cellar/data/cellar'
+import { StepIndicator } from './StepIndicator'
 
 interface CellarManagementProps {
   className?: string
+  selectedWineId?: string | null
+  onPlacementComplete?: (shelf: number, column: number, depth: number) => void
+  showStepIndicator?: boolean
 }
 
-export function CellarManagement({ className = '' }: CellarManagementProps) {
+export function CellarManagement({ className = '', selectedWineId, onPlacementComplete, showStepIndicator = false }: CellarManagementProps) {
   const {
     loading,
     error,
@@ -63,6 +67,19 @@ export function CellarManagement({ className = '' }: CellarManagementProps) {
     console.log('Navigate to wine:', wineId)
   }
 
+  const handleLongPress = (slot: OccupancySlot) => {
+    if (selectedWineId) {
+      // If a wine is selected, confirm placement immediately
+      handleAssignWine(slot)
+    } else {
+      // If no wine is selected, open add/edit drawer with prefilled coordinates
+      // For now, just select the slot and show a message
+      setSelectedSlot(slot)
+      console.log('Long press: Open add/edit drawer for slot', slot)
+      // TODO: Open wine add/edit drawer with prefilled coordinates
+    }
+  }
+
   const handleAssignWine = async (slot: OccupancySlot) => {
     if (unassignedWines.length === 0) {
       alert('No unassigned wines available')
@@ -86,6 +103,35 @@ export function CellarManagement({ className = '' }: CellarManagementProps) {
       loadUnassignedWines().then(setUnassignedWines)
       loadWinesInFridge(selectedFridgeId).then(setWinesInFridge)
       setSelectedSlot(null)
+    }
+  }
+
+  const handlePlaceBottle = async (shelf: number, column: number, depth: DepthPosition) => {
+    if (unassignedWines.length === 0) {
+      alert('No unassigned wines available')
+      return
+    }
+
+    // For now, assign the first unassigned wine
+    // In a real implementation, you'd show a wine selection dialog
+    const wine = unassignedWines[0]
+    
+    const result = await assignWine(
+      wine.id,
+      selectedFridgeId,
+      shelf,
+      column,
+      depth
+    )
+
+    if (result) {
+      // Refresh data
+      loadUnassignedWines().then(setUnassignedWines)
+      loadWinesInFridge(selectedFridgeId).then(setWinesInFridge)
+      setSelectedSlot(null)
+      
+      // Call placement complete callback
+      onPlacementComplete?.(shelf, column, depth)
     }
   }
 
@@ -133,17 +179,18 @@ export function CellarManagement({ className = '' }: CellarManagementProps) {
         {/* Fridge Selection */}
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium">Fridge:</label>
-          <Select
-            value={selectedFridgeId}
-            onValueChange={setSelectedFridgeId}
-            className="w-48"
-          >
+          <div className="w-48">
+            <Select
+              value={selectedFridgeId}
+              onValueChange={setSelectedFridgeId}
+            >
             {fridgeLayouts.map(layout => (
               <option key={layout.fridge_id} value={layout.fridge_id}>
                 {layout.name}
               </option>
             ))}
-          </Select>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -178,6 +225,17 @@ export function CellarManagement({ className = '' }: CellarManagementProps) {
         </div>
       )}
 
+      {/* Step Indicator */}
+      {showStepIndicator && (
+        <div className="mb-6">
+          <StepIndicator
+            currentStep={2}
+            totalSteps={2}
+            title="Step 2 of 2: Choose location"
+          />
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cellar Visualization */}
@@ -186,6 +244,9 @@ export function CellarManagement({ className = '' }: CellarManagementProps) {
             fridgeId={selectedFridgeId}
             onSlotClick={handleSlotClick}
             onWineClick={handleWineClick}
+            onLongPress={handleLongPress}
+            selectedWineId={selectedWineId}
+            onPlaceBottle={handlePlaceBottle}
           />
         </div>
 

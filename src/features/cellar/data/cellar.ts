@@ -6,6 +6,7 @@ import type {
   FridgeOccupancy, 
   DepthPosition 
 } from '../../../types'
+import { DepthPosition as DepthPositionEnum } from '../../../types'
 
 /**
  * Gets all fridge layouts for the household
@@ -148,14 +149,14 @@ export async function assignWineToSlot(
   wineId: string, 
   fridgeId: string, 
   shelf: number, 
-  column: number, 
+  column_position: number, 
   depth: DepthPosition
 ): Promise<CellarSlot> {
   // Check for collisions first
   const { data: collisionData, error: collisionError } = await supabase.rpc('check_slot_collision', {
     p_fridge_id: fridgeId,
     p_shelf: shelf,
-    p_column: column,
+    p_column: column_position,
     p_depth: depth,
     p_exclude_wine_id: null
   })
@@ -166,7 +167,7 @@ export async function assignWineToSlot(
   }
 
   if (collisionData) {
-    throw new Error(`Slot S${shelf} · C${column} · ${depth.charAt(0).toUpperCase() + depth.slice(1)} is already occupied`)
+    throw new Error(`Slot S${shelf} · C${column_position} · ${depth === 1 ? 'Front' : 'Back'} is already occupied`)
   }
 
   // Create the slot assignment
@@ -174,7 +175,7 @@ export async function assignWineToSlot(
     wine_id: wineId,
     fridge_id: fridgeId,
     shelf,
-    column_position: column,
+    column_position: column_position,
     depth,
     household_id: 'default_household'
   }
@@ -216,14 +217,14 @@ export async function moveWineToSlot(
   fromSlotId: string,
   toFridgeId: string,
   toShelf: number,
-  toColumn: number,
+  toColumn_position: number,
   toDepth: DepthPosition
 ): Promise<CellarSlot> {
   // Check for collisions at the destination
   const { data: collisionData, error: collisionError } = await supabase.rpc('check_slot_collision', {
     p_fridge_id: toFridgeId,
     p_shelf: toShelf,
-    p_column: toColumn,
+    p_column: toColumn_position,
     p_depth: toDepth,
     p_exclude_wine_id: wineId
   })
@@ -234,14 +235,14 @@ export async function moveWineToSlot(
   }
 
   if (collisionData) {
-    throw new Error(`Destination slot S${toShelf} · C${toColumn} · ${toDepth.charAt(0).toUpperCase() + toDepth.slice(1)} is already occupied`)
+    throw new Error(`Destination slot S${toShelf} · C${toColumn_position} · ${toDepth === 1 ? 'Front' : 'Back'} is already occupied`)
   }
 
   // Remove from old slot
   await removeWineFromSlot(fromSlotId)
 
   // Assign to new slot
-  return assignWineToSlot(wineId, toFridgeId, toShelf, toColumn, toDepth)
+  return assignWineToSlot(wineId, toFridgeId, toShelf, toColumn_position, toDepth)
 }
 
 /**
@@ -283,4 +284,42 @@ export async function getWinesInFridge(fridgeId: string): Promise<any[]> {
   }
 
   return data || []
+}
+
+/**
+ * Checks if a specific slot is occupied
+ */
+export function checkSlotCollision(
+  shelf: number, 
+  column: number, 
+  depth: DepthPosition, 
+  cellarSlots: CellarSlot[]
+): boolean {
+  return cellarSlots.some(slot => 
+    slot.shelf === shelf && 
+    slot.column_position === column && 
+    slot.depth === depth
+  )
+}
+
+/**
+ * Gets all available slots in the fridge
+ */
+export function getAvailableSlots(
+  fridgeLayout: FridgeLayout, 
+  cellarSlots: CellarSlot[]
+): Array<{ shelf: number; column: number; depth_position: DepthPosition }> {
+  const available: Array<{ shelf: number; column: number; depth_position: DepthPosition }> = []
+  
+  for (let shelf = 1; shelf <= fridgeLayout.shelves; shelf++) {
+    for (let column = 1; column <= fridgeLayout.columns; column++) {
+      for (const depth of [DepthPositionEnum.FRONT, DepthPositionEnum.BACK]) {
+        if (!checkSlotCollision(shelf, column, depth, cellarSlots)) {
+          available.push({ shelf, column, depth_position: depth })
+        }
+      }
+    }
+  }
+  
+  return available
 }

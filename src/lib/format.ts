@@ -137,28 +137,19 @@ export function countryName(code?: string): string {
 }
 
 /**
- * Displays wine title with NV fallback for vintage
+ * Displays wine title with standardized format: "Producer • Wine Name • Vintage"
  */
 export function displayWineTitle(w: Wine): string {
   const vintage = w.vintage ? w.vintage.toString() : 'NV'
+  const wineName = w.wine_name || ''
   
-  // If region is special (like Bordeaux) and appellation is present
-  if (w.region && SPECIAL_REGIONS.includes(w.region) && w.appellation) {
-    return `${w.producer} — ${w.appellation} — ${vintage}`
+  // Standardized format: Producer • Wine Name • Vintage
+  if (wineName) {
+    return `${w.producer} • ${wineName} • ${vintage}`
   }
   
-  // If wine_name is present
-  if (w.wine_name) {
-    return `${w.producer} — ${w.wine_name} — ${vintage}`
-  }
-  
-  // If vineyard is present
-  if (w.vineyard) {
-    return `${w.producer} — ${w.vineyard} — ${vintage}`
-  }
-  
-  // Default case
-  return `${w.producer} — ${vintage}`
+  // If no wine name, just Producer • Vintage
+  return `${w.producer} • ${vintage}`
 }
 
 /**

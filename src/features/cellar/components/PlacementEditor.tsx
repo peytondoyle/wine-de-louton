@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { supabase } from '../../../lib/supabase';
+import { DepthPosition } from '../../../types';
 
 interface PlacementEditorProps {
   wineId?: string;
-  onPlacementChange?: (placement: { shelf: number; column: number; depth: 'front' | 'back' }) => void;
+  onPlacementChange?: (placement: { shelf: number; column_position: number; depth: DepthPosition }) => void;
 }
 
 interface CellarSlot {
@@ -13,12 +14,12 @@ interface CellarSlot {
   wine_id: string | null;
   shelf: number;
   column_position: number;
-  depth: 'front' | 'back';
+  depth: DepthPosition;
 }
 
 export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlacementChange }) => {
-  const [selectedDepth, setSelectedDepth] = useState<'front' | 'back'>('front');
-  const [selectedSlot, setSelectedSlot] = useState<{ shelf: number; column: number } | null>(null);
+  const [selectedDepth, setSelectedDepth] = useState<DepthPosition>(DepthPosition.FRONT);
+  const [selectedSlot, setSelectedSlot] = useState<{ shelf: number; column_position: number } | null>(null);
   const [occupiedSlots, setOccupiedSlots] = useState<CellarSlot[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -41,13 +42,13 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
     loadOccupiedSlots();
   }, []);
 
-  const handleSlotClick = async (shelf: number, column: number) => {
-    setSelectedSlot({ shelf, column });
+  const handleSlotClick = async (shelf: number, column_position: number) => {
+    setSelectedSlot({ shelf, column_position });
     
     // Check for collision
     const isOccupied = occupiedSlots.some(slot => 
       slot.shelf === shelf && 
-      slot.column_position === column && 
+      slot.column_position === column_position && 
       slot.depth === selectedDepth &&
       slot.wine_id !== wineId
     );
@@ -57,13 +58,13 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
       return;
     }
 
-    onPlacementChange?.({ shelf, column, depth: selectedDepth });
+    onPlacementChange?.({ shelf, column_position, depth: selectedDepth });
   };
 
-  const isSlotOccupied = (shelf: number, column: number, depth: 'front' | 'back') => {
+  const isSlotOccupied = (shelf: number, column_position: number, depth: DepthPosition) => {
     return occupiedSlots.some(slot => 
       slot.shelf === shelf && 
-      slot.column_position === column && 
+      slot.column_position === column_position && 
       slot.depth === depth
     );
   };
@@ -76,18 +77,25 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
     for (let shelf = 1; shelf <= shelves; shelf++) {
       const rowCells = [];
       for (let column = 1; column <= columns; column++) {
-        const isSelected = selectedSlot?.shelf === shelf && selectedSlot?.column === column;
+        const isSelected = selectedSlot?.shelf === shelf && selectedSlot?.column_position === column;
         const isOccupied = isSlotOccupied(shelf, column, selectedDepth);
         
         rowCells.push(
           <div
             key={`${shelf}-${column}`}
             className={`
-              w-12 h-12 border border-gray-300 cursor-pointer transition-colors
-              hover:bg-gray-100 flex items-center justify-center text-xs
+              w-12 h-12 min-w-[44px] min-h-[44px] sm:min-w-[40px] sm:min-h-[40px] border border-gray-300 cursor-pointer transition-colors
+              hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 focus-visible:outline-none flex items-center justify-center text-xs
               ${isSelected ? 'bg-blue-500 text-white' : isOccupied ? 'bg-red-100 text-red-600' : 'bg-white'}
             `}
             onClick={() => handleSlotClick(shelf, column)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleSlotClick(shelf, column);
+              }
+            }}
+            tabIndex={0}
             title={`Shelf ${shelf}, Column ${column} (${selectedDepth})`}
           >
             {isSelected ? '●' : isOccupied ? '×' : ''}
@@ -104,8 +112,8 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
     return grid;
   };
 
-  const formatPlacement = (shelf: number, column: number, depth: 'front' | 'back') => {
-    return `S${shelf} · C${column} · ${depth === 'front' ? 'Front' : 'Back'}`;
+  const formatPlacement = (shelf: number, column_position: number, depth: DepthPosition) => {
+    return `S${shelf} · C${column_position} · ${depth === DepthPosition.FRONT ? 'Front' : 'Back'}`;
   };
 
   return (
@@ -117,16 +125,16 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
         <div className="flex items-center gap-2 mb-4">
           <span className="text-sm font-medium">Depth:</span>
           <Button
-            variant={selectedDepth === 'front' ? 'primary' : 'secondary'}
+            variant={selectedDepth === DepthPosition.FRONT ? 'primary' : 'secondary'}
             size="sm"
-            onClick={() => setSelectedDepth('front')}
+            onClick={() => setSelectedDepth(DepthPosition.FRONT)}
           >
             Front
           </Button>
           <Button
-            variant={selectedDepth === 'back' ? 'primary' : 'secondary'}
+            variant={selectedDepth === DepthPosition.BACK ? 'primary' : 'secondary'}
             size="sm"
-            onClick={() => setSelectedDepth('back')}
+            onClick={() => setSelectedDepth(DepthPosition.BACK)}
           >
             Back
           </Button>
@@ -144,7 +152,7 @@ export const PlacementEditor: React.FC<PlacementEditorProps> = ({ wineId, onPlac
           <div className="mt-3 flex items-center gap-2">
             <span className="text-sm text-gray-600">Selected:</span>
             <Badge variant="outline">
-              {formatPlacement(selectedSlot.shelf, selectedSlot.column, selectedDepth)}
+              {formatPlacement(selectedSlot.shelf, selectedSlot.column_position, selectedDepth)}
             </Badge>
           </div>
         )}

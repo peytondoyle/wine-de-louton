@@ -118,11 +118,27 @@ AI suggestions only appear when confidence ≥ 0.75 and can be applied or dismis
 
 ## Deployment
 
-### Vercel (Recommended)
+### ✅ Production Deployment
 
-1. Connect your GitHub repository to Vercel
-2. Set environment variables in Vercel dashboard
-3. Deploy automatically on push
+**Live App**: https://wine-de-louton-qyk4pjyjk-peyton-doyle.vercel.app
+
+The app is successfully deployed to Vercel with:
+- ✅ Environment variables configured
+- ✅ Production build optimized
+- ✅ Authentication protection enabled
+- ✅ All features working
+
+### Vercel Configuration
+
+**Environment Variables Set:**
+- `VITE_SUPABASE_URL`: Configured
+- `VITE_SUPABASE_ANON_KEY`: Configured
+
+**Build Settings:**
+- Framework: Vite
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Node.js Version: 18.x
 
 ### Other Platforms
 

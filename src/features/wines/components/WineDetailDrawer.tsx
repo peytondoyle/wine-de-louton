@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, Suspense, lazy } from 'react'
 import type { Wine } from '../../../types'
 import { WineStatus } from '../../../types'
 import { displayWineTitle, displayTitle, countryFlag, stateBadge, formatSize, formatDate, countryName } from '../../../lib/format'
@@ -6,7 +6,8 @@ import { updateWine, getWine } from '../data/wines'
 import { requestEnrichment } from '../../enrichment/data/enrich'
 import { cn } from '../../../lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/Dialog'
+import { Dialog, DialogContent, DialogHeader } from '../../../components/ui/Dialog'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Button } from '../../../components/ui/Button'
 import { Badge } from '../../../components/ui/Badge'
 import { Label } from '../../../components/ui/Label'
@@ -17,9 +18,43 @@ import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
 import { useZoomGuard } from '../../../hooks/useZoomGuard'
 import DrawerFooterActions from '../../../components/DrawerFooterActions'
 import { useWineActions } from '../../../hooks/useWineActions'
-import EnrichmentReviewPanel from '../../enrichment/components/EnrichmentReviewPanel'
+// Lazy load EnrichmentReviewPanel to reduce bundle size
+const EnrichmentReviewPanel = lazy(() => import('../../enrichment/components/EnrichmentReviewPanel'))
+
+// Fallback component for EnrichmentReviewPanel
+const EnrichmentReviewPanelSkeleton = () => (
+  <div className="space-y-4">
+    <div className="flex items-center justify-between">
+      <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
+      <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="border rounded-lg p-4 space-y-3 bg-white">
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="h-12 bg-gray-100 rounded"></div>
+            <div className="h-12 bg-blue-50 rounded border border-blue-200"></div>
+          </div>
+          <div className="flex gap-2">
+            <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)
+import { EnrichmentTable } from '../../enrichment/components/EnrichmentTable'
+import type { AIEnrichment as NewAIEnrichment, ApplicableFieldKey, AIFieldSuggestion } from '../../../types/enrichment'
 import { EmptyRow } from '../../cellar/components/EmptyRow'
 import { DevEnrichmentButton } from '../../enrichment/components/DevEnrichmentButton'
+import { CellarPlacementPicker } from '../../cellar/CellarPlacementPicker'
+import { getLayout, getOccupancy, assignSlot, getWineSlot, removeSlot } from '../../cellar/cellar.api'
+import { CellarSlot, formatSlot } from '../../cellar/placement.types'
 import { 
   Pencil, 
   Star, 
@@ -156,9 +191,10 @@ interface WineDetailDrawerProps {
   onClose: () => void
   onEdit: (wine: Wine) => void
   onWineUpdated: (wine: Wine) => void
+  focusOnSuggestions?: boolean
 }
 
-export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineDetailDrawerProps) {
+export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOnSuggestions = false }: WineDetailDrawerProps) {
   const [compact, setCompact] = useState(false)
   const [hideSuggestions, setHideSuggestions] = useState(false)
   
@@ -166,11 +202,18 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   const COOLDOWN_S = 20
   const [cooldown, setCooldown] = useState<number>(0)
   const [reenrichError, setReenrichError] = useState<string | null>(null)
+  const [enrichmentStatus, setEnrichmentStatus] = useState<string | null>(null)
   const heroRef = React.useRef<HTMLDivElement>(null)
   const suggestionsRef = React.useRef<HTMLDivElement>(null)
 
+  // Placement state
+  const [layout, setLayout] = useState<{ shelves: number; columns: number; name: string }>({ shelves: 4, columns: 6, name: 'Default' })
+  const [occupancy, setOccupancy] = useState<Set<string>>(new Set())
+  const [currentPlacement, setCurrentPlacement] = useState<CellarSlot | null>(null)
+  const [placementLoading, setPlacementLoading] = useState(false)
+
   // Wine actions hook
-  const { edit, markDrunk, reEnrich, loading } = useWineActions(wine || undefined, {
+  const { edit, markDrunk, loading: baseLoading } = useWineActions(wine || undefined, {
     onWineUpdated,
     onEditWine: onEdit,
     onReEnrichSuccess: () => {
@@ -182,8 +225,146 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
       }, 100)
     }
   })
-  const titleId = React.useId()
-  const descId = React.useId()
+
+  // Generate mock enrichment data for the new table
+  const generateMockEnrichmentData = (): NewAIEnrichment => {
+    if (!wine) return { wineId: '', fields: [] }
+    
+    return {
+      wineId: wine.id,
+      fields: [
+        {
+          kind: 'present',
+          key: 'producer',
+          current: wine.producer,
+          suggestion: wine.producer + ' (Enhanced)',
+          confidence: 0.85,
+          source: 'openai'
+        } satisfies AIFieldSuggestion,
+        {
+          kind: 'missing',
+          key: 'vintage',
+          current: null,
+          suggestion: 2020,
+          confidence: 0.92,
+          source: 'openai'
+        } satisfies AIFieldSuggestion,
+        {
+          kind: 'present',
+          key: 'region',
+          current: wine.region || null,
+          suggestion: (wine.region || 'Unknown') + ', California',
+          confidence: 0.78,
+          source: 'heuristic'
+        } satisfies AIFieldSuggestion,
+        {
+          kind: 'skip',
+          key: 'notes',
+          reason: 'No improvement needed'
+        } satisfies AIFieldSuggestion
+      ]
+    }
+  }
+
+  // Handle applying enrichment suggestions
+  const handleApplyEnrichment = async (key: ApplicableFieldKey, value: string | number) => {
+    if (!wine) return
+    
+    try {
+      // Map the field key to the actual wine field
+      const fieldMap: Partial<Record<ApplicableFieldKey, keyof Wine>> = {
+        producer: 'producer',
+        wineName: 'wine_name',
+        vintage: 'vintage',
+        region: 'region',
+        varietal: 'varietals', // This is an array, so we'd need special handling
+        sizeMl: 'bottle_size', // This is an enum, so we'd need special handling
+        // notes: 'notes' // This field doesn't exist in Wine type
+      }
+
+      const fieldName = fieldMap[key]
+      if (!fieldName) return
+
+      // Update the wine
+      const updatedWine = await updateWine(wine.id, { [fieldName]: value })
+      if (updatedWine) {
+        onWineUpdated(updatedWine)
+        toast.success(`Updated ${key}`)
+      }
+    } catch (error) {
+      console.error('Error applying enrichment:', error)
+      toast.error('Failed to apply suggestion')
+    }
+  }
+
+  // Custom reEnrich function with inline status
+  const [loading, setLoading] = useState({ ...baseLoading, reEnrich: false })
+
+  const reEnrich = async () => {
+    if (!wine) {
+      console.warn('No wine provided to reEnrich action')
+      return
+    }
+
+    setLoading(prev => ({ ...prev, reEnrich: true }))
+    setEnrichmentStatus('Getting suggestions...')
+    
+    try {
+      const enrichment = await requestEnrichment({
+        id: wine.id,
+        producer: wine.producer,
+        vintage: wine.vintage ?? undefined,
+        wine_name: wine.wine_name ?? undefined,
+        appellation: wine.appellation ?? undefined,
+        region: wine.region ?? undefined,
+        country_code: wine.country_code ?? undefined,
+      })
+
+      if (enrichment) {
+        // The requestEnrichment function already updates the wine in the database
+        // We need to fetch the updated wine to get the latest data
+        const updatedWine = await updateWine(wine.id, {
+          ai_enrichment: enrichment,
+          ai_confidence: 0.5,
+          ai_refreshed_at: new Date().toISOString()
+        })
+        
+        onWineUpdated(updatedWine)
+        setEnrichmentStatus('Suggestions ready!')
+        setHideSuggestions(false)
+        
+        // Small delay to ensure the panel is rendered before scrolling
+        setTimeout(() => {
+          suggestionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        
+        // Clear status after 3 seconds
+        setTimeout(() => {
+          setEnrichmentStatus(null)
+        }, 3000)
+      } else {
+        setEnrichmentStatus('No suggestions available')
+        setTimeout(() => {
+          setEnrichmentStatus(null)
+        }, 3000)
+      }
+    } catch (error) {
+      console.error('Error getting new suggestions:', error)
+      setEnrichmentStatus('Failed to get suggestions')
+      setTimeout(() => {
+        setEnrichmentStatus(null)
+      }, 3000)
+    } finally {
+      setLoading(prev => ({ ...prev, reEnrich: false }))
+    }
+  }
+
+  // Auto-trigger enrichment if focusOnSuggestions is true and no enrichment exists
+  React.useEffect(() => {
+    if (focusOnSuggestions && wine && !wine.ai_enrichment && !loading.reEnrich) {
+      reEnrich()
+    }
+  }, [focusOnSuggestions, wine, loading.reEnrich, reEnrich])
 
   // Lock scroll when drawer is open
   useScrollLock(!!wine)
@@ -200,7 +381,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   // Copy title to clipboard
   const handleCopyTitle = async () => {
     try {
-      await navigator.clipboard.writeText(displayTitle(wine))
+      await navigator.clipboard.writeText(displayWineTitle(wine))
       // Visual feedback: clipboard copy success (browser handles this)
     } catch (err) {
       toastError('copy bottle title', err)
@@ -212,6 +393,120 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
     onEdit(wine)
   }
 
+  // Handle slot assignment
+  const handleSlotAssignment = async (slot: CellarSlot | null) => {
+    if (!wine) return
+
+    try {
+      setPlacementLoading(true)
+      
+      if (slot) {
+        // Convert CellarSlot to SlotAssignment
+        const slotAssignment = {
+          shelf: slot.shelf,
+          column_position: slot.column_position,
+          depth: slot.depth
+        }
+        
+        // Assign slot in database
+        await assignSlot(wine.id, slotAssignment)
+        
+        // Update UI state
+        setCurrentPlacement(slot)
+        
+        // Refresh occupancy data
+        const occupancyData = await getOccupancy()
+        const occupancySet = new Set(occupancyData.map(item => `${item.shelf}:${item.column_position}:${item.depth}`))
+        setOccupancy(occupancySet)
+        
+        // Show success toast
+        toast.success('Placement saved', {
+          id: `place-${wine.id}`
+        })
+      } else {
+        // Remove placement
+        const success = await removeSlot(wine.id)
+        
+        if (success) {
+          setCurrentPlacement(null)
+          
+          // Refresh occupancy data
+          const occupancyData = await getOccupancy()
+          const occupancySet = new Set(occupancyData.map(item => `${item.shelf}:${item.column_position}:${item.depth}`))
+          setOccupancy(occupancySet)
+          
+          toast.success('Placement removed', {
+            id: `place-${wine.id}`
+          })
+        } else {
+          throw new Error('Failed to remove slot')
+        }
+      }
+    } catch (error) {
+      console.error('Error managing slot assignment:', error)
+      
+      // Revert optimistic update
+      const wineSlot = await getWineSlot(wine.id)
+      setCurrentPlacement(wineSlot)
+      
+      // Show specific error message for occupied slots
+      if (error instanceof Error && error.message === 'SLOT_OCCUPIED') {
+        toast.error('That spot is taken', {
+          id: `place-${wine.id}`
+        })
+      } else {
+        // Show generic error toast for other failures
+        toast.error('Failed to save placement', {
+          id: `place-${wine.id}`
+        })
+      }
+    } finally {
+      setPlacementLoading(false)
+    }
+  }
+
+
+  // Load placement data when wine changes
+  React.useEffect(() => {
+    if (wine) {
+      const loadPlacementData = async () => {
+        try {
+          setPlacementLoading(true)
+          const [layoutData, occupancyData, wineSlot] = await Promise.all([
+            getLayout(),
+            getOccupancy(),
+            getWineSlot(wine.id)
+          ])
+          
+          if (layoutData) {
+            setLayout(layoutData)
+          }
+          
+          // Convert occupancy data to Set of slot keys
+          const occupancySet = new Set(occupancyData.map(item => `${item.shelf}:${item.column_position}:${item.depth}`))
+          setOccupancy(occupancySet)
+          
+          // Set current placement if wine is assigned to a slot
+          if (wineSlot) {
+            // Convert SlotAssignment to CellarSlot
+            const cellarSlot: CellarSlot = {
+              shelf: wineSlot.shelf,
+              column_position: wineSlot.column_position,
+              depth: wineSlot.depth
+            }
+            setCurrentPlacement(cellarSlot)
+          } else {
+            setCurrentPlacement(null)
+          }
+        } catch (error) {
+          console.error('Error loading placement data:', error)
+        } finally {
+          setPlacementLoading(false)
+        }
+      }
+      loadPlacementData()
+    }
+  }, [wine?.id])
 
   // Reset state when wine changes (different wine selected)
   React.useEffect(() => {
@@ -260,25 +555,22 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        className="p-0"
-        title={displayTitle(wine)}
+        className="p-0 flex flex-col"
+        title={displayWineTitle(wine)}
+        description="Wine details and actions"
+        hideTitleVisually={true}
       >
-        <p id={descId} className="sr-only">
-          Detail view for this wine. Sections include Overview, Drinking Guidance, Ratings and Critic Scores.
-        </p>
 
         {/* Scroll area */}
         <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 pt-5 sm:pt-6 pb-28">
             {/* Sticky micro-header */}
-            <div className={`sticky top-0 z-20 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 px-4 sm:px-6 py-3 bg-white border-b border-neutral-200/80 shadow-sm transition-all duration-200 ${
+            <div className={`sticky top-0 z-20 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 px-4 sm:px-6 py-3 bg-white border-b border-neutral-200/80 shadow-sm motion-safe:transition-[box-shadow,transform,opacity] motion-safe:duration-200 motion-reduce:transition-none ${
               compact ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none"
             }`} style={{ isolation: 'isolate' }}>
               <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
                 {countryFlag(wine.country_code)}
-                <span className="truncate font-medium text-neutral-900">{displayTitle(wine)}</span>
+                <span className="truncate font-medium text-neutral-900">{displayWineTitle(wine)}</span>
               </div>
               </div>
             </div>
@@ -286,16 +578,29 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
           {/* Hero header */}
           <header className="mb-3" ref={heroRef}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <DialogTitle id={titleId} className="flex items-center gap-2 text-xl sm:text-2xl font-semibold">
-                  <span aria-label={`Country ${countryName(wine.country_code)}`}>{countryFlag(wine.country_code)}</span>
-                  <span className="truncate">{displayTitle(wine)}</span>
-                </DialogTitle>
-
+              <div className="flex-1 min-w-0">
+                <DialogPrimitive.Title asChild>
+                  <div className="flex items-start gap-2 text-xl sm:text-2xl font-semibold">
+                    <span aria-label={`Country ${countryName(wine.country_code)}`} className="shrink-0 mt-1">{countryFlag(wine.country_code)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="line-clamp-1 min-w-0">
+                        {displayWineTitle(wine)}
+                      </div>
+                      {wine.vineyard && (
+                        <div className="mt-2">
+                          <Badge variant="secondary" className="text-xs px-2 py-1">
+                            {wine.vineyard}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </DialogPrimitive.Title>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] leading-5 text-neutral-700">
                   {wine.region && <Chip icon="map-pin">{wine.region}</Chip>}
                   {wine.bottle_size && <Chip icon="wine">{formatSize(wine.bottle_size)}</Chip>}
+                  {currentPlacement && <Chip icon="grid-3x3">{formatSlot(currentPlacement)}</Chip>}
                   <StatusPill status={wine.status} />
                 </div>
               </div>
@@ -326,33 +631,35 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
                 </div>
               </div>
 
-              <EnrichmentReviewPanel 
-                wine={wine} 
-                onApplied={() => {
-                  // Refresh the wine data after applying
-                  getWine(wine.id).then(updatedWine => {
-                    if (updatedWine) {
-                      onWineUpdated(updatedWine)
-                      // Check if all AI enrichment fields have been cleared
-                      if (!updatedWine.ai_enrichment || Object.keys(updatedWine.ai_enrichment).length === 0) {
-                        setHideSuggestions(true)
+              <Suspense fallback={<EnrichmentReviewPanelSkeleton />}>
+                <EnrichmentReviewPanel 
+                  wine={wine} 
+                  onApplied={() => {
+                    // Refresh the wine data after applying
+                    getWine(wine.id).then(updatedWine => {
+                      if (updatedWine) {
+                        onWineUpdated(updatedWine)
+                        // Check if all AI enrichment fields have been cleared
+                        if (!updatedWine.ai_enrichment || Object.keys(updatedWine.ai_enrichment).length === 0) {
+                          setHideSuggestions(true)
+                        }
                       }
-                    }
-                  })
-                }}
-                onDismissed={() => {
-                  // Refresh the wine data after dismissing
-                  getWine(wine.id).then(updatedWine => {
-                    if (updatedWine) {
-                      onWineUpdated(updatedWine)
-                      // Check if all AI enrichment fields have been cleared
-                      if (!updatedWine.ai_enrichment || Object.keys(updatedWine.ai_enrichment).length === 0) {
-                        setHideSuggestions(true)
+                    })
+                  }}
+                  onDismissed={() => {
+                    // Refresh the wine data after dismissing
+                    getWine(wine.id).then(updatedWine => {
+                      if (updatedWine) {
+                        onWineUpdated(updatedWine)
+                        // Check if all AI enrichment fields have been cleared
+                        if (!updatedWine.ai_enrichment || Object.keys(updatedWine.ai_enrichment).length === 0) {
+                          setHideSuggestions(true)
+                        }
                       }
-                    }
-                  })
-                }}
-              />
+                    })
+                  }}
+                />
+              </Suspense>
               
               {/* New Suggestions Error Display */}
               {reenrichError && (
@@ -367,6 +674,17 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
               <p className="mt-2 text-[12px] text-neutral-500">
                 AI enrichment from OpenAI. Review before applying.
               </p>
+            </div>
+          )}
+
+          {/* New Enrichment Table */}
+          {wine && (
+            <div className="mt-6">
+              <EnrichmentTable
+                data={generateMockEnrichmentData()}
+                onApply={handleApplyEnrichment}
+                loading={loading.reEnrich}
+              />
             </div>
           )}
 
@@ -537,6 +855,39 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
               )}
             </div>
           </Section>
+          <Divider />
+          <Section title="Placement">
+            {placementLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                <span className="ml-2 text-sm text-neutral-500">Loading placement...</span>
+              </div>
+            ) : (
+              <CellarPlacementPicker
+                shelves={layout.shelves}
+                columns={layout.columns}
+                value={currentPlacement ? {
+                  shelf: currentPlacement.shelf,
+                  column_position: currentPlacement.column_position,
+                  depth: currentPlacement.depth
+                } : undefined}
+                onChange={(value) => {
+                  if (value) {
+                    // Convert PlacementValue to CellarSlot
+                    const cellarSlot: CellarSlot = {
+                      shelf: value.shelf,
+                      column_position: value.column_position,
+                      depth: value.depth
+                    }
+                    handleSlotAssignment(cellarSlot)
+                  } else {
+                    handleSlotAssignment(null)
+                  }
+                }}
+                occupied={occupancy}
+              />
+            )}
+          </Section>
         </div>
 
         {/* Footer actions - positioned outside scroll area */}
@@ -555,7 +906,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated }: WineD
             testId: 'footer-edit'
           }}
           tertiary={{
-            label: loading.reEnrich ? 'Getting suggestions...' : cooldown > 0 ? `New suggestions in ${cooldown}s` : 'New suggestions ready',
+            label: enrichmentStatus || (loading.reEnrich ? 'Getting suggestions...' : cooldown > 0 ? `New suggestions in ${cooldown}s` : 'New suggestions ready'),
             onClick: reEnrich,
             icon: <Sparkles className="h-4 w-4" />,
             loading: loading.reEnrich,

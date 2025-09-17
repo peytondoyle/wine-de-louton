@@ -20,7 +20,9 @@ export function track(event: string, data?: Record<string, any>): void {
   // - PostHog
   // - Custom analytics endpoint
   
-  console.log('Analytics Event:', { event, data });
+  if (import.meta.env.DEV) {
+    console.log('Analytics Event:', { event, data });
+  }
   
   // Example implementation for future:
   // if (typeof window !== 'undefined' && window.gtag) {

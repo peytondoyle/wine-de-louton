@@ -1,10 +1,10 @@
 import React from 'react'
-import { Wine, Grid3X3 } from 'lucide-react'
+import { Wine, Grid3X3, MapPin } from 'lucide-react'
 import { Button } from './ui/Button'
 
 interface NavigationProps {
-  currentView: 'wines' | 'cellar'
-  onViewChange: (view: 'wines' | 'cellar') => void
+  currentView: 'wines' | 'cellar' | 'cellar-map'
+  onViewChange: (view: 'wines' | 'cellar' | 'cellar-map') => void
   className?: string
 }
 
@@ -29,6 +29,16 @@ export function Navigation({ currentView, onViewChange, className = '' }: Naviga
       >
         <Grid3X3 className="h-4 w-4" />
         Cellar
+      </Button>
+      
+      <Button
+        variant={currentView === 'cellar-map' ? 'primary' : 'outline'}
+        size="sm"
+        onClick={() => onViewChange('cellar-map')}
+        className="flex items-center gap-2"
+      >
+        <MapPin className="h-4 w-4" />
+        Map
       </Button>
     </div>
   )

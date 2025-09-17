@@ -109,7 +109,7 @@ export function useCellar() {
 
   // Utility functions
   const formatLocation = useCallback((shelf: number, column: number, depth: DepthPosition): string => {
-    const depthDisplay = depth.charAt(0).toUpperCase() + depth.slice(1)
+    const depthDisplay = depth === 1 ? 'Front' : 'Back'
     return `S${shelf} · C${column} · ${depthDisplay}`
   }, [])
 
@@ -120,7 +120,7 @@ export function useCellar() {
     return {
       shelf: parseInt(match[1], 10),
       column: parseInt(match[2], 10),
-      depth: match[3].toLowerCase() as DepthPosition
+      depth: match[3].toLowerCase() === 'front' ? 1 : 2
     }
   }, [])
 

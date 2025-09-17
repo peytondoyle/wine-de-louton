@@ -21,7 +21,7 @@ export function LocationChip({
   className = '',
   variant = 'default'
 }: LocationChipProps) {
-  const depthDisplay = depth.charAt(0).toUpperCase() + depth.slice(1)
+  const depthDisplay = depth === 1 ? 'Front' : 'Back'
   
   return (
     <Badge 

@@ -39,6 +39,7 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
   const [success, setSuccess] = useState<SuccessState>({ field: null, action: null })
   const [error, setError] = useState<ErrorState>({ field: null, action: null, message: '' })
   const [ariaLiveMessage, setAriaLiveMessage] = useState('')
+  const [focusedField, setFocusedField] = useState<keyof AIEnrichment | null>(null)
   const fieldRefs = useRef<{ [key in keyof AIEnrichment]?: HTMLDivElement | null }>({})
   
   // Enhanced confirmation system
@@ -53,32 +54,53 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
   // Reset confirmations when wine changes
   useEffect(() => {
     reset()
+    setFocusedField(null)
   }, [wine.id, reset])
 
-  // Keyboard event handler for Enter/Esc shortcuts
-  const handleKeyDown = useCallback((event: React.KeyboardEvent, field: keyof AIEnrichment, action: 'apply' | 'dismiss') => {
-    if (event.key === 'Enter' && action === 'apply') {
-      event.preventDefault()
-      handleApply(field, enrichment[field])
-    } else if (event.key === 'Escape' && action === 'dismiss') {
-      event.preventDefault()
-      handleDismiss(field)
-    }
+  // Get available fields for keyboard navigation
+  const availableFields = useMemo(() => {
+    if (!enrichment) return []
+    return (Object.keys(enrichment) as (keyof AIEnrichment)[]).filter(field => enrichment[field])
   }, [enrichment])
 
-  const handleApply = useCallback(async (field: keyof AIEnrichment, data: any) => {
+  // Auto-focus first field when panel loads
+  useEffect(() => {
+    if (availableFields.length > 0 && !focusedField) {
+      setFocusedField(availableFields[0])
+    }
+  }, [availableFields, focusedField])
+
+  // Move focus to next field after action
+  const moveToNextField = useCallback(() => {
+    if (!focusedField || availableFields.length <= 1) return
+    
+    const currentIndex = availableFields.indexOf(focusedField)
+    const nextIndex = (currentIndex + 1) % availableFields.length
+    setFocusedField(availableFields[nextIndex])
+  }, [focusedField, availableFields])
+
+  const handleApply = useCallback(async (field: keyof AIEnrichment, data: AIEnrichment[keyof AIEnrichment]) => {
     setLoading({ field, action: 'apply' })
     setError({ field: null, action: null, message: '' })
     try {
       switch (field) {
         case 'drink_window':
-          await applyDrinkWindow(wine.id, data)
+          const drinkWindow = data as AIEnrichment['drink_window']
+          if (drinkWindow) {
+            await applyDrinkWindow(wine.id, drinkWindow)
+          }
           break
         case 'tasting_notes':
-          await applyTastingNotes(wine.id, data.text)
+          const tastingNotes = data as AIEnrichment['tasting_notes']
+          if (tastingNotes?.text) {
+            await applyTastingNotes(wine.id, tastingNotes.text)
+          }
           break
         case 'critic_scores':
-          await applyCriticScores(wine.id, data)
+          const criticScores = data as AIEnrichment['critic_scores']
+          if (criticScores) {
+            await applyCriticScores(wine.id, criticScores)
+          }
           break
         case 'food_pairings':
           // Food pairings don't have a direct field to apply to, so we'll just dismiss
@@ -99,6 +121,11 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
       // Show enhanced confirmation with checkmark and toast
       showConfirmation(field)
       
+      // Move focus to next field after successful apply
+      setTimeout(() => {
+        moveToNextField()
+      }, 100)
+      
       // Clear success state after 2 seconds
       setTimeout(() => {
         setSuccess({ field: null, action: null })
@@ -117,7 +144,7 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
     } finally {
       setLoading({ field: null, action: null })
     }
-  }, [wine.id, wine.ai_confidence, onApplied, showConfirmation])
+  }, [wine.id, wine.ai_confidence, onApplied, showConfirmation, moveToNextField])
 
   const handleDismiss = useCallback(async (field: keyof AIEnrichment) => {
     setLoading({ field, action: 'dismiss' })
@@ -134,6 +161,12 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
       
       setSuccess({ field, action: 'dismiss' })
       setAriaLiveMessage(`${field.replace('_', ' ')} dismissed`)
+      
+      // Move focus to next field after successful dismiss
+      setTimeout(() => {
+        moveToNextField()
+      }, 100)
+      
       setTimeout(() => {
         setSuccess({ field: null, action: null })
         setAriaLiveMessage('')
@@ -151,7 +184,39 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
     } finally {
       setLoading({ field: null, action: null })
     }
-  }, [wine.id, wine.ai_confidence, onDismissed])
+  }, [wine.id, wine.ai_confidence, onDismissed, moveToNextField])
+
+  // Keyboard event handler for Enter/Esc shortcuts
+  const handleKeyDown = useCallback((event: React.KeyboardEvent, field: keyof AIEnrichment, action: 'apply' | 'dismiss') => {
+    if (event.key === 'Enter' && action === 'apply') {
+      event.preventDefault()
+      handleApply(field, enrichment[field])
+    } else if (event.key === 'Escape' && action === 'dismiss') {
+      event.preventDefault()
+      handleDismiss(field)
+    }
+  }, [enrichment, handleApply, handleDismiss])
+
+  // Global keyboard event handler for A/D shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      // Only handle A/D keys when the panel is focused or when no specific input is focused
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (event.key.toLowerCase() === 'a' && focusedField) {
+        event.preventDefault()
+        handleApply(focusedField, enrichment[focusedField])
+      } else if (event.key.toLowerCase() === 'd' && focusedField) {
+        event.preventDefault()
+        handleDismiss(focusedField)
+      }
+    }
+
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [focusedField, enrichment, handleApply, handleDismiss])
 
   const handleDismissAll = useCallback(async () => {
     setLoading({ field: 'all', action: 'dismiss' })
@@ -201,7 +266,8 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
                 await applyDrinkWindow(wine.id, enrichment[field])
                 break
               case 'tasting_notes':
-                await applyTastingNotes(wine.id, (enrichment[field] as any).text)
+                const tastingNotes = enrichment[field] as AIEnrichment['tasting_notes']
+                await applyTastingNotes(wine.id, tastingNotes?.text || '')
                 break
               case 'critic_scores':
                 await applyCriticScores(wine.id, enrichment[field])
@@ -272,25 +338,41 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
 
     switch (field) {
       case 'drink_window':
-        return `${(data as any).from}–${(data as any).to}`
+        const drinkWindow = data as AIEnrichment['drink_window']
+        return drinkWindow ? `${drinkWindow.from}–${drinkWindow.to}` : null
       case 'tasting_notes':
-        return (data as any).text
+        const tastingNotes = data as AIEnrichment['tasting_notes']
+        return tastingNotes?.text || null
       case 'critic_scores':
+        const criticScores = data as AIEnrichment['critic_scores']
         const scores = []
-        if ((data as any).wine_spectator) scores.push(`WS: ${(data as any).wine_spectator}`)
-        if ((data as any).james_suckling) scores.push(`JS: ${(data as any).james_suckling}`)
+        if (criticScores?.wine_spectator) scores.push(`WS: ${criticScores.wine_spectator}`)
+        if (criticScores?.james_suckling) scores.push(`JS: ${criticScores.james_suckling}`)
         return scores.length > 0 ? scores.join(', ') : null
       case 'food_pairings':
-        return (data as any).items.join(', ')
+        const foodPairings = data as AIEnrichment['food_pairings']
+        return foodPairings?.items.join(', ') || null
       default:
         return null
     }
   }, [enrichment])
 
-  const getSources = (field: keyof AIEnrichment) => {
+  const getSources = (field: keyof AIEnrichment): string[] => {
     const data = enrichment[field]
-    if (!data || !(data as any).source) return []
-    return (data as any).source
+    if (!data) return []
+    
+    switch (field) {
+      case 'drink_window':
+        return (data as AIEnrichment['drink_window'])?.source || []
+      case 'tasting_notes':
+        return (data as AIEnrichment['tasting_notes'])?.source || []
+      case 'critic_scores':
+        return (data as AIEnrichment['critic_scores'])?.source || []
+      case 'food_pairings':
+        return (data as AIEnrichment['food_pairings'])?.source || []
+      default:
+        return []
+    }
   }
 
   const formatSources = (sources: string[]) => {
@@ -367,24 +449,44 @@ function EnrichmentReviewPanel({ wine, onApplied, onDismissed }: EnrichmentRevie
     if (!suggestedValue) return null
 
     const isShowingConfirmation = confirmations.field === field && confirmations.isVisible
+    const isFocused = focusedField === field
+
+    const handleCardClick = () => {
+      setFocusedField(field)
+    }
 
     return (
       <div 
         ref={(el) => { fieldRefs.current[field] = el }}
         className={cn(
-          "border rounded-lg p-4 space-y-3 bg-white transition-all duration-300",
+          "border rounded-lg p-4 space-y-3 bg-white motion-safe:transition-[box-shadow,transform] motion-safe:duration-300 motion-reduce:transition-none cursor-pointer",
           isShowingConfirmation 
             ? "border-green-300 bg-green-50 shadow-md" 
-            : "border-neutral-200"
+            : isFocused
+            ? "border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-200"
+            : "border-neutral-200 hover:border-neutral-300 hover:shadow-sm"
         )}
         role="region"
         aria-labelledby={`${field}-title`}
+        onClick={handleCardClick}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setFocusedField(field)
+          }
+        }}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <Label id={`${field}-title`} className="text-sm font-medium text-neutral-900">{title}</Label>
               <SourceTooltip field={field} />
+              {isFocused && (
+                <div className="flex items-center gap-1 text-blue-600 text-xs font-medium">
+                  <span>Press A to accept, D to dismiss</span>
+                </div>
+              )}
               {isShowingConfirmation && (
                 <div className="flex items-center gap-1 text-green-600 animate-in fade-in-0 zoom-in-95 duration-200">
                   <Check className="h-4 w-4" />

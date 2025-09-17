@@ -6,7 +6,8 @@ import type { Wine, WineFormData } from '../../../types'
 import { BottleSize, WineStatus } from '../../../types'
 import { insertWine, updateWine } from '../data/wines'
 import { requestEnrichment } from '../../enrichment/data/enrich'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/Dialog'
+import { displayWineTitle } from '../../../lib/format'
+import { Dialog, DialogContent } from '../../../components/ui/Dialog'
 import { Button } from '../../../components/ui/Button'
 import DrawerFooterActions from '../../../components/DrawerFooterActions'
 import { Input } from '../../../components/ui/Input'
@@ -20,9 +21,11 @@ import { Section, SectionDivider } from '../../../components/ui/Section'
 import { useScrollLock } from '../../../hooks/useScrollLock'
 import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
 import { useZoomGuard } from '../../../hooks/useZoomGuard'
+import { useDirtyState } from '../../../hooks/useDirtyState'
 import { ChevronDown, Pencil, X, Wine as WineIcon } from 'lucide-react'
 import { toast } from '../../../lib/toast'
 import { toastAddSuccess, toastSaveSuccess, toastError } from '../../../utils/toastMessages'
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 
 /*
  * QA CHECKLIST - WineSheet
@@ -229,6 +232,8 @@ const clamp = (n:number,min:number,max:number)=>Math.max(min,Math.min(max,n));
 export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [devMsg, setDevMsg] = useState<string>('idle')
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingClose, setPendingClose] = useState<(() => void) | null>(null)
 
   // Lock scroll when sheet is open
   useScrollLock(true)
@@ -270,6 +275,66 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
       drink_now: initial?.drink_now,
     },
   })
+
+  // Track dirty state
+  const isDirty = useDirtyState({
+    form,
+    initialValues: {
+      producer: initial?.producer || '',
+      vintage: initial?.vintage,
+      vineyard: initial?.vineyard || '',
+      wine_name: initial?.wine_name || '',
+      appellation: initial?.appellation || '',
+      region: initial?.region || '',
+      country_code: initial?.country_code || '',
+      us_state: initial?.us_state || '',
+      varietals: initial?.varietals || [],
+      bottle_size: initial?.bottle_size || BottleSize.STANDARD_750ML,
+      purchase_date: initial?.purchase_date || '',
+      purchase_place: initial?.purchase_place || '',
+      location_row: initial?.location_row || '',
+      location_position: initial?.location_position,
+      status: initial?.status || WineStatus.CELLARED,
+      drank_on: initial?.drank_on || '',
+      peyton_rating: initial?.peyton_rating,
+      louis_rating: initial?.louis_rating,
+      companions: initial?.companions || [],
+      peyton_notes: initial?.peyton_notes || '',
+      louis_notes: initial?.louis_notes || '',
+      score_wine_spectator: initial?.score_wine_spectator,
+      score_james_suckling: initial?.score_james_suckling,
+      drink_window_from: initial?.drink_window_from,
+      drink_window_to: initial?.drink_window_to,
+      drink_now: initial?.drink_now,
+    }
+  })
+
+  // Handle close with dirty state check
+  const handleClose = () => {
+    if (isDirty) {
+      setPendingClose(() => onClose)
+      setShowConfirmDialog(true)
+    } else {
+      onClose()
+    }
+  }
+
+  // Handle confirm dialog actions
+  const handleConfirmDiscard = () => {
+    setShowConfirmDialog(false)
+    setPendingClose(null)
+    onClose()
+  }
+
+  const handleConfirmKeepEditing = () => {
+    setShowConfirmDialog(false)
+    setPendingClose(null)
+    // Focus back to the form
+    const firstInput = document.querySelector('input, textarea, select') as HTMLElement
+    if (firstInput) {
+      firstInput.focus()
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,27 +474,14 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
     }
   }
 
-  const titleId = React.useId()
-  const descId = React.useId()
-
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent 
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        className="p-0"
-        title={mode === 'add' ? 'Add New Wine' : 'Edit Wine'}
-      >
-        <DialogHeader className="px-5 sm:px-6 py-5 sm:py-6 border-b border-neutral-200/80">
-          <DialogTitle id={titleId}>
-            {mode === 'add' ? 'Add New Wine' : 'Edit Wine'}
-          </DialogTitle>
-          <DialogDescription id={descId}>
-            {mode === 'add' 
-              ? 'Fill in the details below to add a new wine to your collection.' 
-              : 'Update the wine details below.'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open onOpenChange={handleClose}>
+        <DialogContent 
+          className="p-0"
+          title={mode === 'add' ? 'Add wine' : `Edit — ${initial ? displayWineTitle(initial as Wine) : 'Unknown Wine'}`}
+          description="Form to add or update wine information."
+        >
 
         {/* Scroll area */}
         <div ref={scrollAreaRef} className="max-h-[min(90vh,100svh)] overflow-y-auto px-5 sm:px-6 pb-28">
@@ -826,12 +878,26 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
           }}
           secondary={{
             label: 'Cancel',
-            onClick: onClose,
+            onClick: handleClose,
             icon: <X className="h-4 w-4" />,
             testId: 'cancel-button'
           }}
         />
       </DialogContent>
     </Dialog>
+
+    {/* Confirmation Dialog for Unsaved Changes */}
+    <ConfirmDialog
+      open={showConfirmDialog}
+      onOpenChange={setShowConfirmDialog}
+      title="Discard your changes?"
+      description="You have unsaved changes. Are you sure you want to discard them?"
+      confirmLabel="Discard"
+      cancelLabel="Keep Editing"
+      onConfirm={handleConfirmDiscard}
+      onCancel={handleConfirmKeepEditing}
+      variant="destructive"
+    />
+    </>
   )
 }
