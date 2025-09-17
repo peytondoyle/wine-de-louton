@@ -13,11 +13,15 @@ import { Badge } from '../../../components/ui/Badge'
 import { Label } from '../../../components/ui/Label'
 import { ConfidenceBadge } from '../../enrichment/components/ConfidenceBadge'
 import { Section, SectionDivider } from '../../../components/ui/Section'
-import { useScrollLock } from '../../../hooks/useScrollLock'
 import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
 import { useZoomGuard } from '../../../hooks/useZoomGuard'
+import { useInteractionDetection } from '../../../hooks/usePreventClose'
 import DrawerFooterActions from '../../../components/DrawerFooterActions'
 import { useWineActions } from '../../../hooks/useWineActions'
+import { useAISuggestions } from '../../../hooks/useAISuggestions'
+import { AISuggestionsButton } from '../../../components/AISuggestionsButton'
+import { AISuggestionsPanel } from '../../../components/AISuggestionsPanel'
+import { AIAppliedChip } from '../../../components/AIAppliedChip'
 // Lazy load EnrichmentReviewPanel to reduce bundle size
 const EnrichmentReviewPanel = lazy(() => import('../../enrichment/components/EnrichmentReviewPanel'))
 
@@ -226,6 +230,22 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
     }
   })
 
+  // AI Suggestions hook
+  const {
+    isOpen: suggestionsOpen,
+    suggestions,
+    pendingCount,
+    safeCount,
+    isLoading: suggestionsLoading,
+    error: suggestionsError,
+    openSuggestions,
+    closeSuggestions,
+    applySuggestion,
+    applyAllSafe,
+    skipSuggestion,
+    getFieldProvenance
+  } = useAISuggestions(wine!)
+
   // Generate mock enrichment data for the new table
   const generateMockEnrichmentData = (): NewAIEnrichment => {
     if (!wine) return { wineId: '', fields: [] }
@@ -366,14 +386,25 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
     }
   }, [focusOnSuggestions, wine, loading.reEnrich, reEnrich])
 
-  // Lock scroll when drawer is open
-  useScrollLock(!!wine)
-  
   // Prevent zooming when drawer is open
   useZoomGuard(!!wine)
   
   // Handle iOS keyboard focus management
   const scrollAreaRef = useKeyboardFocus(!!wine)
+  
+  // Interaction detection for preventing accidental closes
+  const { attachInteractionListeners, cleanup } = useInteractionDetection(scrollAreaRef)
+
+  // Attach interaction listeners when drawer is open
+  React.useEffect(() => {
+    if (!wine) return
+    
+    const cleanupListeners = attachInteractionListeners()
+    return () => {
+      cleanupListeners?.()
+      cleanup()
+    }
+  }, [wine, attachInteractionListeners, cleanup])
 
   // Early return if wine is null
   if (!wine) return null
@@ -384,7 +415,7 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
       await navigator.clipboard.writeText(displayWineTitle(wine))
       // Visual feedback: clipboard copy success (browser handles this)
     } catch (err) {
-      toastError('copy bottle title', err)
+      toastError(err)
     }
   }
 
@@ -605,6 +636,14 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
                 </div>
               </div>
 
+              {/* AI Suggestions Button */}
+              <div className="flex-shrink-0">
+                <AISuggestionsButton
+                  suggestions={suggestions}
+                  isLoading={suggestionsLoading}
+                  onClick={openSuggestions}
+                />
+              </div>
             </div>
           </header>
 
@@ -712,15 +751,24 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
             <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm leading-6">
               <div>
                 <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Producer</div>
-                <div className="font-medium">{wine.producer}</div>
+                <div className="font-medium flex items-center gap-2">
+                  {wine.producer}
+                  <AIAppliedChip provenance={getFieldProvenance('producer')} />
+                </div>
               </div>
               <div>
                 <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Vintage</div>
-                <div className="font-medium">{wine.vintage ?? 'NV'}</div>
+                <div className="font-medium flex items-center gap-2">
+                  {wine.vintage ?? 'NV'}
+                  <AIAppliedChip provenance={getFieldProvenance('vintage')} />
+                </div>
               </div>
               <div>
                 <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Region</div>
-                <div className="font-medium">{wine.region}</div>
+                <div className="font-medium flex items-center gap-2">
+                  {wine.region}
+                  <AIAppliedChip provenance={getFieldProvenance('region')} />
+                </div>
               </div>
               <div>
                 <div className="text-neutral-500 text-[11px] uppercase tracking-wide">Bottle Size</div>
@@ -913,6 +961,21 @@ export function WineDetailDrawer({ wine, onClose, onEdit, onWineUpdated, focusOn
             disabled: cooldown > 0 || loading.reEnrich,
             testId: 'footer-reenrich'
           }}
+        />
+
+        {/* AI Suggestions Panel */}
+        <AISuggestionsPanel
+          wine={{
+            ...wine,
+            ai_confidence: wine.ai_confidence ?? undefined
+          }}
+          suggestions={suggestions}
+          onApply={applySuggestion}
+          onSkip={skipSuggestion}
+          onApplyAllSafe={applyAllSafe}
+          onClose={closeSuggestions}
+          isLoading={suggestionsLoading}
+          error={suggestionsError}
         />
       </DialogContent>
     </Dialog>

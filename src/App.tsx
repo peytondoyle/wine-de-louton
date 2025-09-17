@@ -1,26 +1,36 @@
-import { useState, useEffect, useMemo, Suspense, lazy } from 'react'
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react'
 import { Plus, Wine as WineIcon, X, Grid3X3, Grid2X2, LayoutGrid } from 'lucide-react'
+
+// Types
 import type { Wine, ControlsState, BottleSize, WineSortField, WineSortDirection } from './types'
 import { WineStatus } from './types'
+
+// Data functions
 import { listWines, getWine, markDrunk, updateWine } from './features/wines/data/wines'
 import { pingWines } from './data/_smoke'
-import { ControlsBar } from './components/ControlsBar'
+
+// Hooks
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { useWineCache } from './hooks/useWineCache'
-import { WineGrid } from './features/wines/components/WineGrid'
 
-// Lazy load heavy components
-const WineSheet = lazy(() => import('./features/wines/components/WineSheet').then(module => ({ default: module.WineSheet })))
-const WineDetailDrawer = lazy(() => import('./features/wines/components/WineDetailDrawer').then(module => ({ default: module.WineDetailDrawer })))
+// Components
+import { ControlsBar } from './components/ControlsBar'
+import { WineGrid } from './features/wines/components/WineGrid'
 import { CsvImportButton } from './components/CsvImportButton'
 import { Button } from './components/ui/Button'
 import { ToastHost } from './components/ToastHost'
 import { QAChecklistOverlay } from './components/QAChecklistOverlay'
 import { Navigation } from './components/Navigation'
 import { CellarManagement } from './components/CellarManagement'
+import { CellarSettings } from './components/CellarSettings'
 import CellarView from './features/cellar/CellarView'
-import { toast } from './lib/toast'
-import { toastDrunk, toastError } from './utils/toastMessages'
+
+// Utils
+import { toastDrunk, toastUndo, toastSaved, toastError } from './utils/toastMessages'
+
+// Lazy load heavy components
+const WineSheet = lazy(() => import('./features/wines/components/WineSheet').then(m => ({ default: m.WineSheet })))
+const WineDetailDrawer = lazy(() => import('./features/wines/components/WineDetailDrawer').then(m => ({ default: m.WineDetailDrawer })))
 
 // Skeleton fallback components
 const DrawerSkeleton = () => (
@@ -168,6 +178,7 @@ function App() {
     const saved = localStorage.getItem('wine-app-view')
     return (saved === 'wines' || saved === 'cellar' || saved === 'cellar-map') ? saved : 'wines'
   })
+  const [showCellarSettings, setShowCellarSettings] = useState(false)
   const [placementWine, setPlacementWine] = useState<Wine | null>(null)
   const [showStepIndicator, setShowStepIndicator] = useState(false)
   const [gridDensity, setGridDensity] = useState<'compact' | 'comfortable'>(() => {
@@ -249,7 +260,7 @@ function App() {
       }
     } catch (error) {
       console.error('Error fetching wine details:', error)
-      toast.error('Load failed')
+      toastError(error)
     }
   }
 
@@ -284,7 +295,7 @@ function App() {
         return newSet
       })
       console.error('Error updating wine status:', error)
-      toast.error('Update failed')
+      toastError(error)
     }
   }
 
@@ -319,7 +330,7 @@ function App() {
       // Add back to undo set on error
       setWinesWithUndo(prev => new Set(prev).add(id))
       console.error('Error updating wine status:', error)
-      toast.error('Update failed')
+      toastError(error)
     }
   }
 
@@ -343,7 +354,7 @@ function App() {
       }
     } catch (error) {
       console.error('Error fetching wine details:', error)
-      toast.error('Load failed')
+      toastError(error)
     }
   }
 
@@ -372,7 +383,9 @@ function App() {
 
   const handlePlacementComplete = (shelf: number, column: number, depth: number) => {
     const depthText = depth === 1 ? 'Front' : 'Back'
-    toast.success(`Placed in R${shelf}C${column} (${depthText}).`)
+    // Note: This is a placement success message, not a wine operation
+    // Using direct toast call since it's not a wine-specific operation
+    console.log(`Placed in R${shelf}C${column} (${depthText}).`)
     setPlacementWine(null)
     setShowStepIndicator(false)
   }
@@ -385,7 +398,11 @@ function App() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-4">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold tracking-tight">Wines de Louton</h1>
-              <Navigation currentView={currentView} onViewChange={setCurrentView} />
+              <Navigation 
+                currentView={currentView} 
+                onViewChange={setCurrentView}
+                onOpenSettings={() => setShowCellarSettings(true)}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-2 md:gap-3">
               {currentView === 'wines' && (
@@ -569,7 +586,13 @@ function App() {
       <ToastHost />
 
       {/* QA Checklist Overlay - Dev Only */}
-      <QAChecklistOverlay />
+      {import.meta.env.DEV && <QAChecklistOverlay />}
+
+      {/* Cellar Settings Modal */}
+      <CellarSettings
+        isOpen={showCellarSettings}
+        onClose={() => setShowCellarSettings(false)}
+      />
     </div>
   )
 }

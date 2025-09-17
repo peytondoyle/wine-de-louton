@@ -7,9 +7,11 @@ import { Plus, Wine as WineIcon } from 'lucide-react'
 
 interface WineGridVirtualProps {
   wines: Wine[]
+  loading?: boolean
   onWineClick: (wine: Wine) => void
   onMarkDrunk: (id: string) => void
   onUndo: (id: string) => void
+  onAddWine: () => void
   onWineUpdated?: (wine: Wine) => void
   onOpenSuggestions?: (wine: Wine) => void
   onPlaceInCellar?: (wine: Wine) => void
@@ -20,9 +22,11 @@ interface WineGridVirtualProps {
 
 export function WineGridVirtual({ 
   wines, 
+  loading,
   onWineClick, 
   onMarkDrunk, 
   onUndo, 
+  onAddWine,
   onWineUpdated, 
   onOpenSuggestions, 
   onPlaceInCellar, 
@@ -79,6 +83,16 @@ export function WineGridVirtual({
     ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3"
     : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6"
 
+  if (loading) {
+    return (
+      <div className={gridClasses}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className={`${gridConfig.cardHeight}px`} />
+        ))}
+      </div>
+    )
+  }
+
   if (wines.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -89,7 +103,7 @@ export function WineGridVirtual({
         <p className="text-muted-foreground mb-6 max-w-sm">
           Start building your wine collection by adding your first bottle.
         </p>
-        <Button onClick={() => {}} className="min-w-[44px] min-h-[44px]">
+        <Button onClick={onAddWine} className="min-w-[44px] min-h-[44px]">
           <Plus className="h-4 w-4 mr-2" />
           Add Your First Bottle
         </Button>

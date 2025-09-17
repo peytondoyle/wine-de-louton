@@ -89,6 +89,40 @@ export async function updateFridgeLayout(fridgeId: string, updates: Partial<Frid
 }
 
 /**
+ * Updates an existing fridge layout by ID
+ */
+export async function updateFridgeLayoutById(id: string, updates: Partial<FridgeLayout>): Promise<FridgeLayout> {
+  const { data, error } = await supabase
+    .from('fridge_layout')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating fridge layout:', error)
+    throw new Error(`Failed to update fridge layout: ${error.message}`)
+  }
+
+  return data
+}
+
+/**
+ * Deletes a fridge layout
+ */
+export async function deleteFridgeLayout(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('fridge_layout')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    console.error('Error deleting fridge layout:', error)
+    throw new Error(`Failed to delete fridge layout: ${error.message}`)
+  }
+}
+
+/**
  * Gets all cellar slots for a specific fridge
  */
 export async function getCellarSlots(fridgeId: string): Promise<CellarSlot[]> {

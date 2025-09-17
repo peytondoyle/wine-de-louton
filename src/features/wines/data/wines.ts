@@ -2,6 +2,7 @@ import { supabase } from '../../../lib/supabase'
 import { safeParseWine, safeParseWineArray, validateCreateWine, validateUpdateWine } from '../../../lib/validation'
 import type { Wine, WineSort, WineFormData, AIEnrichment } from '../../../types'
 import { WineStatus } from '../../../types'
+import type { UndoChange, UndoStack, UndoResult } from '../../../types/undo'
 
 /**
  * Lists wines with optional filtering and sorting
@@ -139,6 +140,12 @@ export async function insertWine(wine: WineFormData): Promise<Wine> {
  * Updates an existing wine
  */
 export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine> {
+  // Get current wine state for undo tracking
+  const currentWine = await getWine(id);
+  if (!currentWine) {
+    throw new Error(`Wine with id ${id} not found`);
+  }
+
   // Validate input data at runtime
   const validatedPatch = validateUpdateWine({ id, ...patch })
   
@@ -155,7 +162,22 @@ export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine
   }
   if (data) {
     try {
-      return safeParseWine(data) as Wine
+      const updatedWine = safeParseWine(data) as Wine;
+      
+      // Track changes for undo (only track fields that actually changed)
+      Object.keys(validatedPatch).forEach(field => {
+        if (field !== 'id' && field !== 'updated_at') {
+          const oldValue = currentWine[field as keyof Wine];
+          const newValue = (validatedPatch as any)[field];
+          
+          // Only track if the value actually changed
+          if (oldValue !== newValue) {
+            addUndoChange(id, field, oldValue, newValue);
+          }
+        }
+      });
+      
+      return updatedWine;
     } catch (validationError) {
       console.error('Wine data validation failed:', validationError)
       throw new Error('Invalid wine data received from server')
@@ -173,7 +195,22 @@ export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine
   if (!fetched) throw new Error('Update succeeded but no row returned');
   
   try {
-    return safeParseWine(fetched) as Wine
+    const updatedWine = safeParseWine(fetched) as Wine;
+    
+    // Track changes for undo (only track fields that actually changed)
+    Object.keys(validatedPatch).forEach(field => {
+      if (field !== 'id' && field !== 'updated_at') {
+        const oldValue = currentWine[field as keyof Wine];
+        const newValue = (validatedPatch as any)[field];
+        
+        // Only track if the value actually changed
+        if (oldValue !== newValue) {
+          addUndoChange(id, field, oldValue, newValue);
+        }
+      }
+    });
+    
+    return updatedWine;
   } catch (validationError) {
     console.error('Wine data validation failed:', validationError)
     throw new Error('Invalid wine data received from server')
@@ -305,6 +342,125 @@ export async function applyCriticScores(id: string, scores: { wine_spectator?: n
 /**
  * Dismisses a specific AI enrichment field without applying it to real fields
  */
+
+// ============================================================================
+// Undo System
+// ============================================================================
+
+// In-memory storage for undo stacks, keyed by wine ID
+const undoStacks = new Map<string, UndoStack>();
+
+// Default configuration
+const DEFAULT_MAX_STACK_SIZE = 10;
+
+/**
+ * Gets or creates an undo stack for a wine
+ */
+function getUndoStack(wineId: string): UndoStack {
+  if (!undoStacks.has(wineId)) {
+    undoStacks.set(wineId, {
+      changes: [],
+      maxSize: DEFAULT_MAX_STACK_SIZE
+    });
+  }
+  return undoStacks.get(wineId)!;
+}
+
+/**
+ * Adds a change to the undo stack for a wine
+ */
+export function addUndoChange(wineId: string, field: string, from: any, to: any): void {
+  const stack = getUndoStack(wineId);
+  
+  const change: UndoChange = {
+    field,
+    from,
+    to,
+    timestamp: new Date().toISOString(),
+    changeId: `${wineId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  };
+  
+  // Add to the beginning of the array (most recent first)
+  stack.changes.unshift(change);
+  
+  // Trim to max size
+  if (stack.changes.length > stack.maxSize) {
+    stack.changes = stack.changes.slice(0, stack.maxSize);
+  }
+}
+
+/**
+ * Undoes the last change for a wine
+ */
+export async function undoLastChange(wineId: string): Promise<UndoResult> {
+  try {
+    const stack = getUndoStack(wineId);
+    
+    if (stack.changes.length === 0) {
+      return {
+        success: false,
+        error: 'No changes to undo'
+      };
+    }
+    
+    // Get the most recent change
+    const lastChange = stack.changes[0];
+    
+    // Prepare the update to restore the previous value
+    const updateData: Partial<Wine> = {};
+    updateData[lastChange.field as keyof Wine] = lastChange.from;
+    
+    // Apply the undo update
+    const updatedWine = await updateWine(wineId, updateData);
+    
+    // Remove the undone change from the stack
+    stack.changes.shift();
+    
+    return {
+      success: true,
+      restoredField: lastChange.field,
+      restoredValue: lastChange.from
+    };
+  } catch (error) {
+    console.error('Failed to undo last change:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+/**
+ * Gets the undo history for a wine
+ */
+export function getUndoHistory(wineId: string): UndoChange[] {
+  const stack = getUndoStack(wineId);
+  return [...stack.changes]; // Return a copy to prevent external mutation
+}
+
+/**
+ * Clears the undo history for a wine
+ */
+export function clearUndoHistory(wineId: string): void {
+  const stack = getUndoStack(wineId);
+  stack.changes = [];
+}
+
+/**
+ * Checks if a wine has any undoable changes
+ */
+export function hasUndoableChanges(wineId: string): boolean {
+  const stack = getUndoStack(wineId);
+  return stack.changes.length > 0;
+}
+
+/**
+ * Gets the last change for a wine (for display purposes)
+ */
+export function getLastChange(wineId: string): UndoChange | null {
+  const stack = getUndoStack(wineId);
+  return stack.changes.length > 0 ? stack.changes[0] : null;
+}
 export async function dismissAIField(id: string, field: keyof AIEnrichment): Promise<Wine> {
   // First get the current wine to access its AI enrichment
   const wine = await getWine(id)

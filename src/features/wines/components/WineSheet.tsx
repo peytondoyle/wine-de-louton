@@ -18,13 +18,12 @@ import { PillInput } from '../../../components/ui/PillInput'
 import { Field } from '../../../components/ui/Field'
 import { VarietalsInput } from '../../../components/VarietalsInput'
 import { Section, SectionDivider } from '../../../components/ui/Section'
-import { useScrollLock } from '../../../hooks/useScrollLock'
 import { useKeyboardFocus } from '../../../hooks/useKeyboardFocus'
 import { useZoomGuard } from '../../../hooks/useZoomGuard'
 import { useDirtyState } from '../../../hooks/useDirtyState'
+import { useInteractionDetection } from '../../../hooks/usePreventClose'
 import { ChevronDown, Pencil, X, Wine as WineIcon } from 'lucide-react'
-import { toast } from '../../../lib/toast'
-import { toastAddSuccess, toastSaveSuccess, toastError } from '../../../utils/toastMessages'
+import { toastSaved, toastError } from '../../../utils/toastMessages'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 
 /*
@@ -235,14 +234,23 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingClose, setPendingClose] = useState<(() => void) | null>(null)
 
-  // Lock scroll when sheet is open
-  useScrollLock(true)
-  
   // Prevent zooming when sheet is open
   useZoomGuard(true)
   
   // Handle iOS keyboard focus management
   const scrollAreaRef = useKeyboardFocus(true)
+  
+  // Interaction detection for preventing accidental closes
+  const { attachInteractionListeners, cleanup } = useInteractionDetection(scrollAreaRef)
+
+  // Attach interaction listeners when sheet is open
+  React.useEffect(() => {
+    const cleanupListeners = attachInteractionListeners()
+    return () => {
+      cleanupListeners?.()
+      cleanup()
+    }
+  }, [attachInteractionListeners, cleanup])
 
   const form = useForm<WineFormValues>({
     resolver: zodResolver(wineSchema) as any,
@@ -369,7 +377,7 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
     if (!producer) {
       console.error('[AddWine] validation: missing producer');
       setDevMsg('validation: missing producer');
-      toast.error('Producer required');
+      toastError(new Error('Producer required'));
       return;
     }
 
@@ -468,7 +476,7 @@ export function WineSheet({ mode, initial, onClose, onSaved }: WineSheetProps) {
     } catch (err: any) {
       console.error('[AddWine] insert:error', { message: err?.message, details: err });
       setDevMsg('insert:error');
-      toast.error('Save failed');
+      toastError(err);
     } finally {
       setIsSubmitting(false);
     }
