@@ -61,7 +61,7 @@ function ToastItem({ toast, onDismiss }: ToastItemProps) {
     <div
       className={cn(
         'flex items-start gap-3 p-4 rounded-lg border shadow-sm max-w-sm w-full',
-        'transform transition-all duration-150 ease-out',
+        'motion-safe:transform motion-safe:transition-[box-shadow,transform,opacity] motion-safe:duration-150 motion-safe:ease-out motion-reduce:transition-none',
         isVisible && !isLeaving
           ? 'translate-y-0 opacity-100 scale-100'
           : 'translate-y-2 opacity-0 scale-95',
@@ -99,14 +99,14 @@ export function ToastHost() {
   const { toasts, dismissToast } = useToastStore()
 
   return (
-    <div 
-      className="fixed inset-0 pointer-events-none z-50"
-      aria-live="polite"
-      aria-label="Notifications"
-    >
+    <div role="status" aria-live="polite" aria-atomic="true">
+      <div 
+        className="fixed inset-0 pointer-events-none z-50"
+        aria-label="Notifications"
+      >
       {/* Desktop: top-right */}
       <div className="hidden sm:block absolute top-4 right-4 space-y-2">
-        {toasts.map((toast) => (
+        {toasts.map((toast: Toast) => (
           <ToastItem
             key={toast.id}
             toast={toast}
@@ -117,13 +117,14 @@ export function ToastHost() {
       
       {/* Mobile: bottom-center */}
       <div className="sm:hidden absolute bottom-4 left-4 right-4 flex flex-col-reverse space-y-reverse space-y-2">
-        {toasts.map((toast) => (
+        {toasts.map((toast: Toast) => (
           <ToastItem
             key={toast.id}
             toast={toast}
             onDismiss={dismissToast}
           />
         ))}
+      </div>
       </div>
     </div>
   )

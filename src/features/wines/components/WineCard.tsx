@@ -4,9 +4,8 @@ import { WineStatus } from '../../../types'
 import { displayWineTitle, countryFlag, stateBadge, formatSize, countryName } from '../../../lib/format'
 import { Badge } from '../../../components/ui/Badge'
 import { Button } from '../../../components/ui/Button'
-import { MapPin, Wine as WineIcon, WineOff, Check, Undo2, Sparkles } from 'lucide-react'
+import { MapPin, Wine as WineIcon, WineOff, Check, Undo2, Sparkles, MapPin as PlaceIcon } from 'lucide-react'
 import { cn } from '../../../lib/utils'
-import { DevEnrichmentButton } from '../../enrichment/components/DevEnrichmentButton'
 
 interface WineCardProps {
   wine: Wine
@@ -14,6 +13,8 @@ interface WineCardProps {
   onUndo: (id: string) => void
   onClick: (wine: Wine) => void
   onWineUpdated?: (wine: Wine) => void
+  onOpenSuggestions?: (wine: Wine) => void
+  onPlaceInCellar?: (wine: Wine) => void
   density?: 'compact' | 'comfortable'
   showUndo?: boolean
   gridViewMode?: boolean
@@ -31,7 +32,7 @@ const StatusPill = ({ status }: { status: 'cellared' | 'drunk' }) => (
   </Badge>
 )
 
-export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, density = 'comfortable', showUndo = false, gridViewMode = false, gridIndex = 0 }: WineCardProps) {
+export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, onOpenSuggestions, onPlaceInCellar, density = 'comfortable', showUndo = false, gridViewMode = false, gridIndex = 0 }: WineCardProps) {
   const [showUndoChip, setShowUndoChip] = useState(false)
 
   const handleMarkDrunk = (e: React.MouseEvent) => {
@@ -44,6 +45,16 @@ export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, de
     e.stopPropagation()
     onUndo(wine.id)
     setShowUndoChip(false)
+  }
+
+  const handleOpenSuggestions = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onOpenSuggestions?.(wine)
+  }
+
+  const handlePlaceInCellar = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onPlaceInCellar?.(wine)
   }
 
   const handleCardClick = () => {
@@ -93,7 +104,11 @@ export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, de
   
   return (
     <article 
-      className={cn("group h-full p-4 max-w-full w-full rounded-xl border border-neutral-200/70 bg-white shadow-sm hover:shadow-md hover:translate-y-[1px] hover:border-neutral-200 active:translate-y-0 transition-all duration-150 motion-reduce:transform-none cursor-pointer relative")}
+      className={cn("group h-full p-4 max-w-full w-full rounded-xl border border-neutral-200/70 bg-white shadow-sm hover:shadow-card hover:translate-y-[1px] hover:border-neutral-200 active:translate-y-0 motion-safe:transition-[box-shadow,transform] motion-safe:duration-150 motion-safe:ease-out motion-reduce:transition-none cursor-pointer relative", {
+        // Fixed heights for virtualization to prevent layout shift
+        'min-h-[160px] max-h-[160px]': density === 'compact',
+        'min-h-[200px] max-h-[200px]': density === 'comfortable'
+      })}
       onClick={handleCardClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -114,13 +129,22 @@ export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, de
       )}
       <div className="grid grid-rows-[auto_auto_1fr] h-full gap-1">
         {/* Top: title/flag */}
-        <header className="flex items-center gap-2 text-[15px] font-semibold min-w-0">
-          <span aria-label={`Country ${countryName(wine.country_code)}`} className="shrink-0">
+        <header className="flex items-start gap-2 text-[15px] font-semibold min-w-0">
+          <span aria-label={`Country ${countryName(wine.country_code)}`} className="shrink-0 mt-0.5">
             {countryFlag(wine.country_code)}
           </span>
-          <h3 className="truncate min-w-0">
-            {wine.producer ?? 'Unknown'} — {wine.vintage ?? 'NV'}
-          </h3>
+          <div className="flex-1 min-w-0">
+            <h3 className="line-clamp-1 min-w-0">
+              {displayWineTitle(wine)}
+            </h3>
+            {wine.vineyard && (
+              <div className="mt-1">
+                <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                  {wine.vineyard}
+                </Badge>
+              </div>
+            )}
+          </div>
         </header>
         
         {/* Middle: meta (region, size) */}
@@ -154,8 +178,27 @@ export function WineCard({ wine, onMarkDrunk, onUndo, onClick, onWineUpdated, de
                 Undo
               </Button>
             )}
-            {!wine.ai_enrichment && onWineUpdated && (
-              <DevEnrichmentButton wine={wine} onWineUpdated={onWineUpdated} />
+            {!wine.ai_enrichment && onOpenSuggestions && (
+              <Button
+                size="responsive"
+                variant="outline"
+                onClick={handleOpenSuggestions}
+                className="w-auto whitespace-nowrap text-xs px-2 py-1 h-7"
+              >
+                <Sparkles className="h-3 w-3 mr-1" />
+                Suggestions
+              </Button>
+            )}
+            {onPlaceInCellar && wine.status === WineStatus.CELLARED && (
+              <Button
+                size="responsive"
+                variant="outline"
+                onClick={handlePlaceInCellar}
+                className="w-auto whitespace-nowrap text-xs px-2 py-1 h-7"
+              >
+                <PlaceIcon className="h-3 w-3 mr-1" />
+                Place in Cellar
+              </Button>
             )}
             <Button 
               size="responsive" 

@@ -75,7 +75,7 @@ describe('Wines Patch Helpers - Additional Edge Cases', () => {
         update: mockUpdate
       })
 
-      const result = await applyDrinkWindow('test-wine-id', { from: undefined, to: undefined })
+      const result = await applyDrinkWindow('test-wine-id', { from: undefined, to: undefined } as any)
 
       expect(result.drink_window_from).toBeUndefined()
       expect(result.drink_window_to).toBeUndefined()

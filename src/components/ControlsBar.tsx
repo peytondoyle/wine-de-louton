@@ -12,6 +12,9 @@ import { WineStatus, BottleSize } from '../types'
 interface ControlsBarProps {
   value: ControlsState
   onChange: (value: ControlsState) => void
+  onReset?: () => void
+  isStale?: boolean
+  onRefresh?: () => void
 }
 
 const BOTTLE_SIZES: { value: BottleSize | 'All'; label: string }[] = [
@@ -39,7 +42,7 @@ const SORT_OPTIONS: { value: WineSortField; direction: WineSortDirection; label:
   { value: 'average_rating', direction: 'asc', label: 'Rating (Lowest)' },
 ]
 
-export function ControlsBar({ value, onChange }: ControlsBarProps) {
+export function ControlsBar({ value, onChange, onReset, isStale, onRefresh }: ControlsBarProps) {
   const [showFilters, setShowFilters] = useState(false)
   const [debouncedSearch] = useDebounce(value.search, 300)
 
@@ -113,7 +116,34 @@ export function ControlsBar({ value, onChange }: ControlsBarProps) {
             <X className="h-4 w-4" />
           </Button>
         )}
+        {onReset && (
+          <button
+            onClick={onReset}
+            className="text-sm text-gray-500 hover:text-gray-700 underline px-2 py-1"
+            aria-label="Reset all filters and clear localStorage"
+          >
+            Reset
+          </button>
+        )}
       </div>
+
+      {/* Stale data indicator */}
+      {isStale && (
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+          <div className="animate-spin rounded-full h-3 w-3 border border-amber-600 border-t-transparent"></div>
+          <span>Refreshing data...</span>
+          {onRefresh && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              className="h-6 px-2 text-amber-800 hover:bg-amber-100"
+            >
+              Refresh now
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       {showFilters && (

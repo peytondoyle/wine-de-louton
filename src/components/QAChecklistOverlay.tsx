@@ -153,7 +153,7 @@ export const QAChecklistOverlay: React.FC = () => {
   return (
     <>
       {/* Floating Button */}
-      <div className="fixed bottom-4 right-4 z-50">
+      <div className="fixed bottom-4 right-4 z-40">
         <Button
           onClick={() => setIsOpen(true)}
           className="rounded-full w-12 h-12 shadow-lg hover:shadow-xl transition-shadow"
@@ -165,8 +165,8 @@ export const QAChecklistOverlay: React.FC = () => {
 
       {/* Overlay */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-4xl max-h-[80vh] overflow-hidden">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl max-h-[80vh] overflow-hidden z-50">
             <div className="p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
@@ -193,7 +193,7 @@ export const QAChecklistOverlay: React.FC = () => {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-blue-600 h-2 rounded-full motion-safe:transition-[width] motion-safe:duration-300 motion-reduce:transition-none"
                     style={{ width: `${progressPercentage}%` }}
                   />
                 </div>

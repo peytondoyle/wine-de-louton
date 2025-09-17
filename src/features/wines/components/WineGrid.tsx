@@ -1,7 +1,9 @@
 import type { Wine } from '../../../types'
 import { WineCard } from './WineCard'
+import { WineGridVirtual } from './WineGridVirtual'
 import { Button } from '../../../components/ui/Button'
 import { Plus, Wine as WineIcon } from 'lucide-react'
+import { useMemo } from 'react'
 
 interface WineGridProps {
   wines: Wine[]
@@ -11,12 +13,48 @@ interface WineGridProps {
   onUndo: (id: string) => void
   onAddWine: () => void
   onWineUpdated?: (wine: Wine) => void
+  onOpenSuggestions?: (wine: Wine) => void
+  onPlaceInCellar?: (wine: Wine) => void
   density?: 'compact' | 'comfortable'
   winesWithUndo?: Set<string>
   gridViewMode?: boolean
 }
 
-export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onAddWine, onWineUpdated, density = 'comfortable', winesWithUndo = new Set(), gridViewMode = false }: WineGridProps) {
+export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onAddWine, onWineUpdated, onOpenSuggestions, onPlaceInCellar, density = 'comfortable', winesWithUndo = new Set(), gridViewMode = false }: WineGridProps) {
+  // Calculate grid dimensions based on density and screen size
+  const gridConfig = useMemo(() => {
+    const isCompact = density === 'compact'
+    
+    // Card dimensions (fixed to prevent layout shift)
+    const cardHeight = isCompact ? 160 : 200
+    const cardWidth = isCompact ? 200 : 280
+    
+    // Responsive columns based on screen size
+    // These match the CSS grid breakpoints
+    const getColumnsPerRow = (containerWidth: number) => {
+      if (containerWidth < 640) return 1 // sm
+      if (containerWidth < 1024) return 2 // lg
+      if (isCompact) {
+        if (containerWidth < 1280) return 3 // xl
+        return 5 // 2xl
+      } else {
+        return 3 // lg and above for comfortable
+      }
+    }
+    
+    // Default to 3 columns for SSR and initial render
+    const columnsPerRow = 3
+    const rows = Math.ceil(wines.length / columnsPerRow)
+    
+    return {
+      cardHeight,
+      cardWidth,
+      columnsPerRow,
+      rows,
+      isCompact
+    }
+  }, [density, wines.length])
+
   const gridClasses = density === 'compact' 
     ? "mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3"
     : "mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6"
@@ -25,7 +63,7 @@ export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onA
     return (
       <div className={gridClasses}>
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className={`${density === 'compact' ? 'h-[160px]' : 'h-[200px]'} animate-pulse rounded-lg bg-muted`} />
+          <div key={i} className={`${gridConfig.cardHeight}px`} />
         ))}
       </div>
     )
@@ -49,6 +87,25 @@ export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onA
     )
   }
 
+  // Use virtualization for large lists (120+ wines)
+  if (wines.length > 120) {
+    return (
+      <WineGridVirtual
+        wines={wines}
+        onWineClick={onWineClick}
+        onMarkDrunk={onMarkDrunk}
+        onUndo={onUndo}
+        onWineUpdated={onWineUpdated}
+        onOpenSuggestions={onOpenSuggestions}
+        onPlaceInCellar={onPlaceInCellar}
+        density={density}
+        winesWithUndo={winesWithUndo}
+        gridViewMode={gridViewMode}
+      />
+    )
+  }
+
+  // Use regular DOM rendering for small lists
   return (
     <div className={gridClasses}>
       {wines.map((wine, index) => (
@@ -59,6 +116,8 @@ export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onA
           onUndo={onUndo}
           onClick={onWineClick}
           onWineUpdated={onWineUpdated}
+          onOpenSuggestions={onOpenSuggestions}
+          onPlaceInCellar={onPlaceInCellar}
           density={density}
           showUndo={winesWithUndo.has(wine.id)}
           gridViewMode={gridViewMode}

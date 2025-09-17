@@ -44,6 +44,7 @@ export default function DrawerFooterActions({
         disabled={disabled || (anyLoading && !loading)}
         aria-busy={loading}
         aria-pressed={false}
+        aria-label={label}
         data-testid={testId}
         className="sm:w-auto w-full"
       >

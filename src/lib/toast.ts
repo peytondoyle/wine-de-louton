@@ -12,37 +12,54 @@ export interface Toast {
 
 interface ToastStore {
   toasts: Toast[]
-  addToast: (toast: Omit<Toast, 'id' | 'createdAt'>) => string
+  addToast: (toast: Omit<Toast, 'id' | 'createdAt'> & { id?: string }) => string
   updateToast: (id: string, updates: Partial<Omit<Toast, 'id' | 'createdAt'>>) => void
   dismissToast: (id: string) => void
   dismissAll: () => void
 }
 
+// In-memory Map for rate limiting by toast ID
+const lastShown = new Map<string, number>()
+
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   
-  addToast: (toast) => {
+  addToast: (toast: Omit<Toast, 'id' | 'createdAt'> & { id?: string }): string => {
     const now = Date.now()
-    const DEDUPE_WINDOW_MS = 3000 // 3 seconds for better deduplication
+    const RATE_LIMIT_MS = 2000 // 2 seconds rate limiting
     
-    // Check for duplicate toasts within the dedupe window
-    const existingToast = useToastStore.getState().toasts.find(t => 
-      t.message === toast.message && 
-      t.variant === toast.variant && 
-      (now - t.createdAt) < DEDUPE_WINDOW_MS
-    )
-    
-    if (existingToast) {
-      // Reset the timer for the existing toast
-      return existingToast.id
+    // If an ID is provided, check rate limiting
+    if (toast.id) {
+      const lastShownTime = lastShown.get(toast.id)
+      if (lastShownTime && (now - lastShownTime) < RATE_LIMIT_MS) {
+        // Rate limited - drop this toast
+        return toast.id
+      }
+      lastShown.set(toast.id, now)
     }
     
-    const id = Math.random().toString(36).substr(2, 9)
+    const id = toast.id || Math.random().toString(36).substr(2, 9)
+    
+    // Set default durations based on variant
+    const getDefaultDuration = (variant: ToastVariant): number => {
+      switch (variant) {
+        case 'success':
+        case 'info':
+          return 2000
+        case 'error':
+          return 4000
+        case 'loading':
+          return 0
+        default:
+          return 2000
+      }
+    }
+    
     const newToast: Toast = {
       ...toast,
       id,
       createdAt: now,
-      duration: toast.duration ?? (toast.variant === 'loading' ? 0 : 5000)
+      duration: toast.duration ?? getDefaultDuration(toast.variant)
     }
     
     set((state) => ({
@@ -84,17 +101,37 @@ export const useToastStore = create<ToastStore>((set) => ({
 
 // Public API
 export const toast = {
-  success: (message: string, duration?: number) => 
-    useToastStore.getState().addToast({ variant: 'success', message, duration }),
+  success: (message: string, options?: { duration?: number; id?: string }) => 
+    useToastStore.getState().addToast({ 
+      variant: 'success', 
+      message, 
+      duration: options?.duration,
+      id: options?.id
+    }),
     
-  error: (message: string, duration?: number) => 
-    useToastStore.getState().addToast({ variant: 'error', message, duration }),
+  error: (message: string, options?: { duration?: number; id?: string }) => 
+    useToastStore.getState().addToast({ 
+      variant: 'error', 
+      message, 
+      duration: options?.duration,
+      id: options?.id
+    }),
     
-  info: (message: string, duration?: number) => 
-    useToastStore.getState().addToast({ variant: 'info', message, duration }),
+  info: (message: string, options?: { duration?: number; id?: string }) => 
+    useToastStore.getState().addToast({ 
+      variant: 'info', 
+      message, 
+      duration: options?.duration,
+      id: options?.id
+    }),
     
-  loading: (message: string) => 
-    useToastStore.getState().addToast({ variant: 'loading', message, duration: 0 }),
+  loading: (message: string, id?: string) => 
+    useToastStore.getState().addToast({ 
+      variant: 'loading', 
+      message, 
+      duration: 0,
+      id
+    }),
     
   update: (id: string, updates: Partial<Omit<Toast, 'id' | 'createdAt'>>) => 
     useToastStore.getState().updateToast(id, updates),
@@ -106,13 +143,13 @@ export const toast = {
     useToastStore.getState().dismissAll(),
     
   // Batch operations for collapsing multiple events
-  batchSuccess: (count: number, action: string) => {
+  batchSuccess: (count: number, action: string, id?: string) => {
     const message = count === 1 ? `${action} applied` : `${action} applied to ${count} items`
-    return useToastStore.getState().addToast({ variant: 'success', message })
+    return useToastStore.getState().addToast({ variant: 'success', message, id })
   },
   
-  batchError: (count: number, action: string) => {
+  batchError: (count: number, action: string, id?: string) => {
     const message = count === 1 ? `Failed to ${action}` : `Failed to ${action} ${count} items`
-    return useToastStore.getState().addToast({ variant: 'error', message })
+    return useToastStore.getState().addToast({ variant: 'error', message, id })
   }
 }

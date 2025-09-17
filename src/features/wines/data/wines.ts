@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase'
+import { safeParseWine, safeParseWineArray, validateCreateWine, validateUpdateWine } from '../../../lib/validation'
 import type { Wine, WineSort, WineFormData, AIEnrichment } from '../../../types'
 import { WineStatus } from '../../../types'
 
@@ -60,7 +61,15 @@ export async function listWines(options: {
     throw new Error(`Failed to fetch wines: ${error.message}`)
   }
 
-  return data || []
+  // Validate API response at runtime
+  if (!data) return []
+  
+  try {
+    return safeParseWineArray(data) as Wine[]
+  } catch (validationError) {
+    console.error('Wine data validation failed:', validationError)
+    throw new Error('Invalid wine data received from server')
+  }
 }
 
 /**
@@ -81,21 +90,30 @@ export async function getWine(id: string): Promise<Wine | null> {
     throw new Error(`Failed to fetch wine: ${error.message}`)
   }
 
-  return data
+  // Validate API response at runtime
+  if (!data) return null
+  
+  try {
+    return safeParseWine(data) as Wine
+  } catch (validationError) {
+    console.error('Wine data validation failed:', validationError)
+    throw new Error('Invalid wine data received from server')
+  }
 }
 
 /**
  * Inserts a new wine
  */
 export async function insertWine(wine: WineFormData): Promise<Wine> {
-  const wineWithHousehold = {
+  // Validate input data at runtime
+  const validatedWine = validateCreateWine({
     ...wine,
     household_id: 'default_household'
-  }
+  })
   
   const { data, error } = await supabase
     .from('wines')
-    .insert([wineWithHousehold])
+    .insert([validatedWine])
     .select()
     .single()
 
@@ -104,16 +122,29 @@ export async function insertWine(wine: WineFormData): Promise<Wine> {
     throw new Error(`Failed to insert wine: ${error.message}`)
   }
 
-  return data
+  // Validate API response at runtime
+  if (!data) {
+    throw new Error('No data returned from wine insertion')
+  }
+  
+  try {
+    return safeParseWine(data) as Wine
+  } catch (validationError) {
+    console.error('Wine data validation failed:', validationError)
+    throw new Error('Invalid wine data received from server')
+  }
 }
 
 /**
  * Updates an existing wine
  */
 export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine> {
+  // Validate input data at runtime
+  const validatedPatch = validateUpdateWine({ id, ...patch })
+  
   const { data, error } = await supabase
     .from('wines')
-    .update(patch)
+    .update(validatedPatch)
     .eq('id', id)
     .select()
     .maybeSingle();
@@ -122,7 +153,14 @@ export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine
     // Bubble up PostgREST details for debugging
     throw new Error(`Update failed: ${error.message}`);
   }
-  if (data) return data as Wine;
+  if (data) {
+    try {
+      return safeParseWine(data) as Wine
+    } catch (validationError) {
+      console.error('Wine data validation failed:', validationError)
+      throw new Error('Invalid wine data received from server')
+    }
+  }
 
   // Fallback (RLS or return=minimal cases)
   const { data: fetched, error: fetchErr } = await supabase
@@ -133,7 +171,13 @@ export async function updateWine(id: string, patch: Partial<Wine>): Promise<Wine
 
   if (fetchErr) throw new Error(`Refetch after update failed: ${fetchErr.message}`);
   if (!fetched) throw new Error('Update succeeded but no row returned');
-  return fetched as Wine;
+  
+  try {
+    return safeParseWine(fetched) as Wine
+  } catch (validationError) {
+    console.error('Wine data validation failed:', validationError)
+    throw new Error('Invalid wine data received from server')
+  }
 }
 
 /**
@@ -169,7 +213,7 @@ export async function deleteWine(id: string): Promise<void> {
  * Applies drink window from AI enrichment to the wine's real fields
  * and clears only the drink_window AI enrichment key
  */
-export async function applyDrinkWindow(id: string, value: { from: number; to: number }): Promise<Wine> {
+export async function applyDrinkWindow(id: string, value: { from?: number; to?: number }): Promise<Wine> {
   // First get the current wine to access its AI enrichment
   const wine = await getWine(id)
   if (!wine) {
