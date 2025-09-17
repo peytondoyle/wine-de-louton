@@ -21,6 +21,9 @@ interface ToastStore {
 // In-memory Map for rate limiting by toast ID
 const lastShown = new Map<string, number>()
 
+// In-memory Map for deduplication by key
+const lastDedupeTime = new Map<string, number>()
+
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   
@@ -152,4 +155,24 @@ export const toast = {
     const message = count === 1 ? `Failed to ${action}` : `Failed to ${action} ${count} items`
     return useToastStore.getState().addToast({ variant: 'error', message, id })
   }
+}
+
+/**
+ * Dedupe toast function that ignores repeats within a time window
+ * @param key - Unique key for deduplication
+ * @param fn - Function to call if not deduplicated
+ * @param windowMs - Time window in milliseconds (default: 1000)
+ */
+export function dedupeToast(key: string, fn: () => void, windowMs: number = 1000) {
+  const now = Date.now()
+  const lastTime = lastDedupeTime.get(key)
+  
+  if (lastTime && (now - lastTime) < windowMs) {
+    // Within deduplication window - ignore this call
+    return
+  }
+  
+  // Update last time and execute function
+  lastDedupeTime.set(key, now)
+  fn()
 }

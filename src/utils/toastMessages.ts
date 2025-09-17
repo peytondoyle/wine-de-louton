@@ -1,42 +1,37 @@
-import { toast } from '../lib/toast'
+import { toast, dedupeToast } from '../lib/toast'
 
 /**
  * Toast message helpers for consistent user feedback across the application
  */
 
 /**
- * Show success toast for adding a new wine
+ * Show success toast for marking wine as drunk
  */
-export function toastAddSuccess(name?: string) {
-  toast.success('Wine added.')
+export function toastDrunk(id: string, name?: string) {
+  const message = name ? `Marked ${name} as drunk` : 'Marked as drunk'
+  dedupeToast(`drunk:${id}`, () => toast.success(message))
+}
+
+/**
+ * Show success toast for undoing drunk status
+ */
+export function toastUndo(id: string, name?: string) {
+  const message = name ? `Moved ${name} to cellar` : 'Moved to cellar'
+  dedupeToast(`undo:${id}`, () => toast.success(message))
 }
 
 /**
  * Show success toast for saving/updating a wine
  */
-export function toastSaveSuccess(name?: string) {
-  toast.success('Saved.')
-}
-
-/**
- * Show success toast for marking wine as drunk or cellared
- */
-export function toastDrunk(status: 'drunk' | 'cellared', name?: string) {
-  const action = status === 'drunk' ? 'Marked as drunk.' : 'Moved to cellar.'
-  toast.success(action)
-}
-
-/**
- * Show info toast for new suggestions queued
- */
-export function toastReenrichQueued(name?: string) {
-  toast.info('New suggestions queued.')
+export function toastSaved(name?: string) {
+  const message = name ? `Saved ${name}` : 'Saved'
+  dedupeToast(`save:${name || 'general'}`, () => toast.success(message))
 }
 
 /**
  * Show error toast with consistent formatting
  */
-export function toastError(action: string, error: unknown) {
-  const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
-  toast.error(errorMessage)
+export function toastError(errLike: unknown) {
+  const errorMessage = errLike instanceof Error ? errLike.message : 'An unexpected error occurred'
+  dedupeToast(`error:${Date.now()}`, () => toast.error(errorMessage))
 }

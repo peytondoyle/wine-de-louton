@@ -4,6 +4,7 @@ import { WineGridVirtual } from './WineGridVirtual'
 import { Button } from '../../../components/ui/Button'
 import { Plus, Wine as WineIcon } from 'lucide-react'
 import { useMemo } from 'react'
+import { useVirtualizedGridEnabled } from '../../../hooks/useVirtualizedGridEnabled'
 
 interface WineGridProps {
   wines: Wine[]
@@ -21,6 +22,29 @@ interface WineGridProps {
 }
 
 export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onAddWine, onWineUpdated, onOpenSuggestions, onPlaceInCellar, density = 'comfortable', winesWithUndo = new Set(), gridViewMode = false }: WineGridProps) {
+  // Check if virtualized grid should be enabled
+  const isVirtualizedEnabled = useVirtualizedGridEnabled()
+
+  // Conditional render: choose between virtual and static grid
+  if (isVirtualizedEnabled) {
+    return (
+      <WineGridVirtual
+        wines={wines}
+        loading={loading}
+        onWineClick={onWineClick}
+        onMarkDrunk={onMarkDrunk}
+        onUndo={onUndo}
+        onAddWine={onAddWine}
+        onWineUpdated={onWineUpdated}
+        onOpenSuggestions={onOpenSuggestions}
+        onPlaceInCellar={onPlaceInCellar}
+        density={density}
+        winesWithUndo={winesWithUndo}
+        gridViewMode={gridViewMode}
+      />
+    )
+  }
+
   // Calculate grid dimensions based on density and screen size
   const gridConfig = useMemo(() => {
     const isCompact = density === 'compact'
@@ -95,6 +119,7 @@ export function WineGrid({ wines, loading, onWineClick, onMarkDrunk, onUndo, onA
         onWineClick={onWineClick}
         onMarkDrunk={onMarkDrunk}
         onUndo={onUndo}
+        onAddWine={onAddWine}
         onWineUpdated={onWineUpdated}
         onOpenSuggestions={onOpenSuggestions}
         onPlaceInCellar={onPlaceInCellar}

@@ -1,9 +1,11 @@
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
-import { cn } from "../../lib/utils"
+import { cn, lockBody, unlockBody } from "../../lib/utils"
 import { VisuallyHidden } from "./VisuallyHidden"
-import { useScrollLock } from "../../hooks/useScrollLock"
+import { useFocusTrap } from "../../hooks/useFocusTrap"
+import { useModalHandlers } from "../../hooks/useModalHandlers"
+import { usePreventClose } from "../../hooks/usePreventClose"
 
 const Dialog = DialogPrimitive.Root
 
@@ -18,22 +20,26 @@ const DialogOverlay = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay> & {
     onClose?: () => void
   }
->(({ className, onClose, ...props }, ref) => (
-  <DialogPrimitive.Overlay
-    ref={ref}
-    className={cn(
-      "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm",
-      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:transition-opacity motion-reduce:data-[state=open]:opacity-100 motion-reduce:data-[state=closed]:opacity-0",
-      className
-    )}
-    style={{ 
-      touchAction: 'none',
-      overscrollBehavior: 'contain'
-    }}
-    onClick={onClose}
-    {...props}
-  />
-))
+>(({ className, onClose, ...props }, ref) => {
+  const { handleBackdropClick } = useModalHandlers(onClose)
+  
+  return (
+    <DialogPrimitive.Overlay
+      ref={ref}
+      className={cn(
+        "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:transition-opacity motion-reduce:data-[state=open]:opacity-100 motion-reduce:data-[state=closed]:opacity-0",
+        className
+      )}
+      style={{ 
+        touchAction: 'none',
+        overscrollBehavior: 'contain'
+      }}
+      onClick={handleBackdropClick}
+      {...props}
+    />
+  )
+})
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
@@ -58,8 +64,29 @@ const DialogContent = React.forwardRef<
   // Determine if dialog is actually open
   const actuallyOpen = propIsOpen !== undefined ? propIsOpen : isOpen
 
-  // Lock background scroll when dialog is open
-  useScrollLock(actuallyOpen)
+  // Use new body lock utility with reference counting
+  React.useEffect(() => {
+    if (actuallyOpen) {
+      lockBody()
+    } else {
+      unlockBody()
+    }
+    
+    return () => {
+      if (actuallyOpen) {
+        unlockBody()
+      }
+    }
+  }, [actuallyOpen])
+
+  // Focus trap
+  const focusTrapRef = useFocusTrap(actuallyOpen, () => onOpenChange?.(false))
+  
+  // Prevent close during interactions
+  const { shouldPreventClose } = usePreventClose()
+  
+  // Modal handlers
+  const { handleEscapeKey, handlePointerDownOutside, handleInteractOutside } = useModalHandlers(() => onOpenChange?.(false), shouldPreventClose)
 
   // Viewport meta management for zoom locking
   React.useEffect(() => {
@@ -189,6 +216,7 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={(node) => {
           contentRef.current = node
+          focusTrapRef.current = node
           if (typeof ref === 'function') {
             ref(node)
           } else if (ref) {
@@ -211,25 +239,17 @@ const DialogContent = React.forwardRef<
           touchAction: 'pan-y',
           overscrollBehavior: 'contain'
         }}
+        data-modal-content=""
         data-dialog-content=""
         onPointerDown={(e) => e.stopPropagation()}
-        onPointerDownOutside={(e) => {
-          // Allow overlay click to close; but don't treat scrollbar/thumb drags as outside
-          if ((e.target as HTMLElement)?.closest('[data-dialog-content]')) e.preventDefault();
-        }}
-        onInteractOutside={(e) => {
-          // Only allow overlay click to close. Keyboard focus moves okay.
-          const el = e.target as HTMLElement | null;
-          if (!el) return;
-          // If click started within the content subtree, do not close.
-          if (el.closest('[data-dialog-content]')) e.preventDefault();
-        }}
+        onPointerDownOutside={handlePointerDownOutside}
+        onInteractOutside={handleInteractOutside}
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => {
           // Prevent auto-focus to allow custom focus management
           e.preventDefault()
         }}
-        onEscapeKeyDown={(e) => onOpenChange?.(false)}
+        onEscapeKeyDown={handleEscapeKey}
         aria-modal="true"
         role="dialog"
         data-state={isOpen ? 'open' : 'closed'}

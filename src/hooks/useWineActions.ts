@@ -4,7 +4,7 @@ import type { Wine } from '../types'
 import { WineStatus } from '../types'
 import { updateWine, deleteWine } from '../features/wines/data/wines'
 import { requestEnrichment } from '../features/enrichment/data/enrich'
-import { toastDrunk, toastReenrichQueued, toastError } from '../utils/toastMessages'
+import { toastDrunk, toastError } from '../utils/toastMessages'
 
 interface UseWineActionsOptions {
   onWineUpdated?: (wine: Wine) => void
@@ -55,10 +55,10 @@ export function useWineActions(
       })
       
       options.onWineUpdated?.(updatedWine)
-      // Visual feedback: wine data updates in drawer
+      toastDrunk(wine.id, wine.producer)
     } catch (error) {
       console.error('Error marking wine as drunk:', error)
-      toastError('mark wine as drunk', error)
+      toastError(error)
     } finally {
       setLoading('markDrunk', false)
     }
@@ -98,11 +98,11 @@ export function useWineActions(
         options.onReEnrichSuccess?.()
         // Visual feedback: AI suggestions appear in drawer
       } else {
-        toastError('fetch AI suggestions', new Error('No enrichment data returned'))
+        toastError(new Error('No enrichment data returned'))
       }
     } catch (error) {
       console.error('Error getting new suggestions:', error)
-      toastError('refresh AI suggestions', error)
+      toastError(error)
     } finally {
       setLoading('reEnrich', false)
     }
@@ -131,7 +131,7 @@ export function useWineActions(
       // Visual feedback: wine disappears from list
     } catch (error) {
       console.error('Error deleting wine:', error)
-      toastError('delete wine', error)
+      toastError(error)
     } finally {
       setLoading('deleteWine', false)
     }

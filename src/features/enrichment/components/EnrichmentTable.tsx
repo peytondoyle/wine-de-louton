@@ -20,7 +20,13 @@ function getFieldDisplayName(key: ApplicableFieldKey): string {
     region: 'Region',
     varietal: 'Varietal',
     sizeMl: 'Size (mL)',
-    notes: 'Notes'
+    notes: 'Notes',
+    drink_window_from: 'Drink Window From',
+    drink_window_to: 'Drink Window To',
+    tasting_notes: 'Tasting Notes',
+    score_wine_spectator: 'Wine Spectator Score',
+    score_james_suckling: 'James Suckling Score',
+    food_pairings: 'Food Pairings'
   }
   return names[key]
 }

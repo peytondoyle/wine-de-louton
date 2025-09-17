@@ -99,6 +99,24 @@ export interface FridgeLayout {
   name: string;
 }
 
+// Layout management types
+export interface LayoutConfig {
+  shelves: number;
+  columns: number;
+  name: string;
+}
+
+export interface LayoutFormData {
+  shelves: number;
+  columns: number;
+  name: string;
+}
+
+export interface LayoutValidation {
+  shelves: { min: number; max: number };
+  columns: { min: number; max: number };
+}
+
 export interface CellarSlot {
   id: string;
   created_at: string;
