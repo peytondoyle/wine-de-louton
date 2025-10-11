@@ -41,7 +41,7 @@ export const useToastStore = create<ToastStore>((set) => ({
       lastShown.set(toast.id, now)
     }
     
-    const id = toast.id || Math.random().toString(36).substr(2, 9)
+    const id = toast.id || Math.random().toString(36).substring(2, 11)
     
     // Set default durations based on variant
     const getDefaultDuration = (variant: ToastVariant): number => {

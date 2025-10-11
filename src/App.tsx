@@ -68,12 +68,13 @@ const SheetSkeleton = () => (
 )
 
 function App() {
-  // Use wine cache for instant loading
-  const { wines: allWines, isStale, isLoading: cacheLoading, error, refresh } = useWineCache()
-  const [otherLoading, setOtherLoading] = useState(false) // Keep for other loading states
-  
-  // Use cache loading state for initial load
-  const loading = cacheLoading && allWines.length === 0
+  // Temporarily simplify to isolate the error
+  const [otherLoading, setOtherLoading] = useState(false)
+  const loading = false
+  const allWines: any[] = []
+  const isStale = false
+  const error = null
+  const refresh = async () => {}
   
   // Default controls state
   const defaultControls = {
