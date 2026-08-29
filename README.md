@@ -1,3 +1,11 @@
+<!-- Archive-status header added 2026-08-29; original content below is unchanged. -->
+> **ARCHIVED — Wine catalog app with AI enrichment (Vite + React + TS + Supabase).**
+>
+> - **Status:** Archived
+> - **Died:** Last commit 2025-10-13 (favicon). Reason not further recorded in-repo.
+
+---
+
 # Wine de Louton 🍷
 
 A modern wine catalog application built with Vite + React + TypeScript + Tailwind CSS + Supabase, featuring AI-powered wine enrichment.
